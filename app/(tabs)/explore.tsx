@@ -1,8 +1,10 @@
 // app/(tabs)/explore.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '../../utils/supabase';
 import {
+  ActivityIndicator,
   Dimensions,
   ScrollView,
   StyleSheet,
@@ -27,32 +29,65 @@ interface ServiceProvider {
   available: boolean;
 }
 
-const providers: ServiceProvider[] = [
-  { id: '1', name: 'John Doe', service: 'Plumber', rating: 4.8, reviews: 120, hourlyRate: '$45', distance: '2.5 km', available: true },
-  { id: '2', name: 'Jane Smith', service: 'Electrician', rating: 4.9, reviews: 95, hourlyRate: '$50', distance: '3.2 km', available: true },
-  { id: '3', name: 'Mike Johnson', service: 'Carpenter', rating: 4.7, reviews: 88, hourlyRate: '$40', distance: '1.8 km', available: false },
-  { id: '4', name: 'Sarah Williams', service: 'Cleaner', rating: 4.9, reviews: 150, hourlyRate: '$35', distance: '4.1 km', available: true },
-  { id: '5', name: 'David Brown', service: 'Painter', rating: 4.6, reviews: 76, hourlyRate: '$42', distance: '2.9 km', available: true },
-  { id: '6', name: 'Emily Davis', service: 'Gardener', rating: 4.8, reviews: 102, hourlyRate: '$38', distance: '3.5 km', available: true },
-];
-
 const categories = ['All', 'Plumber', 'Electrician', 'Carpenter', 'Cleaner', 'Painter', 'Gardener'];
 
 export default function ExploreScreen() {
+  const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+  useEffect(() => {
+    const fetchProviders = async () => {
+      setLoading(true);
+      let query = supabase.from('providers').select(`
+        id,
+        business_name,
+        business_type,
+        rating,
+        total_jobs,
+        is_available,
+        profiles (
+          full_name
+        )
+      `);
+
+      if (selectedCategory !== 'All') {
+        query = query.eq('business_type', selectedCategory);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching providers:', error);
+      } else {
+        const formattedProviders = data.map((p: any) => ({
+          id: p.id,
+          name: p.profiles.full_name,
+          service: p.business_type,
+          rating: p.rating,
+          reviews: p.total_jobs,
+          hourlyRate: '$50', // Placeholder
+          distance: '3.0 km', // Placeholder
+          available: p.is_available,
+        }));
+        setProviders(formattedProviders);
+      }
+      setLoading(false);
+    };
+
+    fetchProviders();
+  }, [selectedCategory]);
 
   const handleProviderPress = (providerId: string) => {
     console.log('Provider pressed:', providerId);
     // Navigate to provider detail screen
   };
 
-  const filteredProviders = providers.filter(provider => {
-    const matchesSearch = provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         provider.service.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || provider.service === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredProviders = providers.filter(provider =>
+    provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    provider.service.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <LinearGradient
@@ -121,43 +156,49 @@ export default function ExploreScreen() {
             </TouchableOpacity>
           </View>
 
-          {filteredProviders.map((provider) => (
-            <TouchableOpacity
-              key={provider.id}
-              style={styles.providerCard}
-              onPress={() => handleProviderPress(provider.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.providerLeft}>
-                <View style={styles.avatarContainer}>
-                  <Ionicons name="person" size={32} color="#0d9488" />
-                  {provider.available && <View style={styles.onlineBadge} />}
-                </View>
-                <View style={styles.providerInfo}>
-                  <Text style={styles.providerName}>{provider.name}</Text>
-                  <Text style={styles.providerService}>{provider.service}</Text>
-                  <View style={styles.providerMeta}>
-                    <View style={styles.ratingContainer}>
-                      <Ionicons name="star" size={14} color="#f59e0b" />
-                      <Text style={styles.ratingText}>{provider.rating}</Text>
-                      <Text style={styles.reviewsText}>({provider.reviews})</Text>
-                    </View>
-                    <View style={styles.distanceContainer}>
-                      <Ionicons name="location-outline" size={14} color="#64748b" />
-                      <Text style={styles.distanceText}>{provider.distance}</Text>
+          {loading ? (
+            <ActivityIndicator size="large" color="#0d9488" style={{ marginTop: 50 }} />
+          ) : filteredProviders.length === 0 ? (
+            <Text style={styles.noResultsText}>No providers found.</Text>
+          ) : (
+            filteredProviders.map((provider) => (
+              <TouchableOpacity
+                key={provider.id}
+                style={styles.providerCard}
+                onPress={() => handleProviderPress(provider.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.providerLeft}>
+                  <View style={styles.avatarContainer}>
+                    <Ionicons name="person" size={32} color="#0d9488" />
+                    {provider.available && <View style={styles.onlineBadge} />}
+                  </View>
+                  <View style={styles.providerInfo}>
+                    <Text style={styles.providerName}>{provider.name}</Text>
+                    <Text style={styles.providerService}>{provider.service}</Text>
+                    <View style={styles.providerMeta}>
+                      <View style={styles.ratingContainer}>
+                        <Ionicons name="star" size={14} color="#f59e0b" />
+                        <Text style={styles.ratingText}>{provider.rating.toFixed(1)}</Text>
+                        <Text style={styles.reviewsText}>({provider.reviews})</Text>
+                      </View>
+                      <View style={styles.distanceContainer}>
+                        <Ionicons name="location-outline" size={14} color="#64748b" />
+                        <Text style={styles.distanceText}>{provider.distance}</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
-              </View>
-              <View style={styles.providerRight}>
-                <Text style={styles.hourlyRate}>{provider.hourlyRate}</Text>
-                <Text style={styles.perHour}>/hr</Text>
-                <TouchableOpacity style={styles.bookButton}>
-                  <Ionicons name="calendar-outline" size={16} color="white" />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
+                <View style={styles.providerRight}>
+                  <Text style={styles.hourlyRate}>{provider.hourlyRate}</Text>
+                  <Text style={styles.perHour}>/hr</Text>
+                  <TouchableOpacity style={styles.bookButton}>
+                    <Ionicons name="calendar-outline" size={16} color="white" />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
 
           <View style={styles.bottomSpacing} />
         </ScrollView>

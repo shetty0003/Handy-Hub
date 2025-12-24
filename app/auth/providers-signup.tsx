@@ -55,19 +55,24 @@ export default function ProviderSignUpPage() {
   };
 
   const handleSignUp = async () => {
-  // Validation
-  if (!agreeTerms || !agreeVerification) {
-    Alert.alert('Agreement Required', 'Please agree to the terms and verification process');
-    return;
-  }
+    // Validation
+    if (!agreeTerms || !agreeVerification) {
+      Alert.alert('Agreement Required', 'Please agree to the terms and verification process');
+      return;
+    }
 
-  const requiredFields = ['fullName', 'email', 'phone', 'businessName', 'businessType', 'password'];
-  const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
+    const requiredFields = ['fullName', 'email', 'phone', 'businessName', 'businessType', 'password'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
 
-  if (missingFields.length > 0) {
-    Alert.alert('Missing Information', 'Please fill in all required fields (*)');
-    return;
-  }
+    if (missingFields.length > 0) {
+      Alert.alert('Missing Information', `Please fill in all required fields (*): ${missingFields.join(', ')}`);
+      return;
+    }
+
+    if (formData.phone.length < 10) {
+      Alert.alert('Invalid Phone Number', 'Please enter a valid phone number');
+      return;
+    }
 
   if (formData.password !== formData.retypePassword) {
     Alert.alert('Password Mismatch', 'Passwords do not match');

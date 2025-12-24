@@ -1,8 +1,10 @@
 // app/(tabs)/jobs.tsx - Client Jobs/Bookings Screen
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '../../utils/supabase';
 import {
+    ActivityIndicator,
     Dimensions,
     ScrollView,
     StyleSheet,
@@ -29,83 +31,63 @@ interface Booking {
   iconColor: string;
 }
 
-const bookingsData: Booking[] = [
-  { 
-    id: '1', 
-    title: 'Kitchen Sink Repair', 
-    service: 'Plumbing', 
-    provider: 'John Martinez',
-    providerRating: 4.9,
-    date: 'Today', 
-    time: '2:00 PM', 
-    location: '123 Main St', 
-    status: 'upcoming', 
-    price: '$75',
-    icon: 'water',
-    iconColor: '#3b82f6'
-  },
-  { 
-    id: '2', 
-    title: 'House Cleaning', 
-    service: 'Cleaning', 
-    provider: 'Sarah Wilson',
-    providerRating: 5.0,
-    date: 'Tomorrow', 
-    time: '10:00 AM', 
-    location: '123 Main St', 
-    status: 'upcoming', 
-    price: '$85',
-    icon: 'sparkles',
-    iconColor: '#ec4899'
-  },
-  { 
-    id: '3', 
-    title: 'AC Maintenance', 
-    service: 'HVAC', 
-    provider: 'Mike Johnson',
-    providerRating: 4.7,
-    date: 'Dec 22', 
-    time: '3:00 PM', 
-    location: '123 Main St', 
-    status: 'in-progress', 
-    price: '$120',
-    icon: 'snow',
-    iconColor: '#06b6d4'
-  },
-  { 
-    id: '4', 
-    title: 'Electrical Wiring', 
-    service: 'Electrical', 
-    provider: 'David Brown',
-    providerRating: 4.8,
-    date: 'Dec 18', 
-    time: '4:30 PM', 
-    location: '123 Main St', 
-    status: 'completed', 
-    price: '$150',
-    icon: 'flash',
-    iconColor: '#f59e0b'
-  },
-  { 
-    id: '5', 
-    title: 'Room Painting', 
-    service: 'Painting', 
-    provider: 'Lisa Anderson',
-    providerRating: 4.6,
-    date: 'Dec 15', 
-    time: '1:00 PM', 
-    location: '123 Main St', 
-    status: 'completed', 
-    price: '$200',
-    icon: 'brush',
-    iconColor: '#10b981'
-  },
-];
-
 const tabs = ['All', 'Upcoming', 'In Progress', 'Completed', 'Cancelled'];
 
 export default function ClientJobsScreen() {
+  const [bookingsData, setBookingsData] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState('All');
+
+  useEffect(() => {
+    const fetchBookings = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from('bookings')
+          .select(`
+            id,
+            title,
+            service_type,
+            date,
+            time,
+            location,
+            status,
+            price,
+            providers (
+              profiles (
+                full_name
+              ),
+              rating
+            )
+          `)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error fetching bookings:', error);
+        } else {
+          const formattedBookings = data.map((b: any) => ({
+            id: b.id,
+            title: b.title,
+            service: b.service_type,
+            provider: b.providers.profiles.full_name,
+            providerRating: b.providers.rating,
+            date: new Date(b.date).toLocaleDateString(),
+            time: b.time,
+            location: b.location,
+            status: b.status,
+            price: `$${b.price}`,
+            icon: 'hammer', // Placeholder
+            iconColor: '#8b5cf6', // Placeholder
+          }));
+          setBookingsData(formattedBookings);
+        }
+      }
+      setLoading(false);
+    };
+
+    fetchBookings();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -222,7 +204,9 @@ export default function ClientJobsScreen() {
           </ScrollView>
 
           {/* Bookings List */}
-          {filteredBookings.length === 0 ? (
+          {loading ? (
+            <ActivityIndicator size="large" color="#0d9488" style={{ marginTop: 50 }} />
+          ) : filteredBookings.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={64} color="#cbd5e1" />
               <Text style={styles.emptyText}>No bookings found</Text>
@@ -268,7 +252,7 @@ export default function ClientJobsScreen() {
                     <Text style={styles.providerName}>{booking.provider}</Text>
                     <View style={styles.ratingContainer}>
                       <Ionicons name="star" size={12} color="#f59e0b" />
-                      <Text style={styles.ratingText}>{booking.providerRating}</Text>
+                      <Text style={styles.ratingText}>{booking.providerRating.toFixed(1)}</Text>
                     </View>
                   </View>
                 </View>

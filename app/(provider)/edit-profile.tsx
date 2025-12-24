@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
+import { getUserProfile } from '../../utils/profileHelper';
 import {
   Alert,
   ScrollView,
@@ -29,8 +30,8 @@ interface ProviderProfile {
 }
 
 export default function EditProviderProfileScreen() {
-  const params = useLocalSearchParams();
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProviderProfile>({
     business_name: '',
     business_type: '',
@@ -43,36 +44,29 @@ export default function EditProviderProfileScreen() {
   });
 
   useEffect(() => {
-    if (params.provider) {
-      try {
-        const providerData = JSON.parse(params.provider as string);
-        setProfile({
-          business_name: providerData.business_name || '',
-          business_type: providerData.business_type || '',
-          business_address: providerData.business_address || '',
-          years_of_experience: providerData.years_of_experience?.toString() || '',
-          license_number: providerData.license_number || '',
-          tax_id: providerData.tax_id || '',
-          phone: '',
-          description: '',
-        });
-      } catch (error) {
-        console.error('Error parsing provider data:', error);
+    const fetchProfile = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const userProfile = await getUserProfile(user.id);
+        if (userProfile) {
+          setProfile({
+            business_name: userProfile.providers?.business_name || '',
+            business_type: userProfile.providers?.business_type || '',
+            business_address: userProfile.providers?.business_address || '',
+            years_of_experience: userProfile.providers?.years_of_experience?.toString() || '',
+            license_number: userProfile.providers?.license_number || '',
+            tax_id: userProfile.providers?.tax_id || '',
+            phone: userProfile.phone || '',
+            description: userProfile.providers?.description || '',
+          });
+        }
       }
-    }
-    
-    if (params.profile) {
-      try {
-        const profileData = JSON.parse(params.profile as string);
-        setProfile(prev => ({
-          ...prev,
-          phone: profileData.phone || '',
-        }));
-      } catch (error) {
-        console.error('Error parsing profile data:', error);
-      }
-    }
-  }, [params]);
+      setLoading(false);
+    };
+
+    fetchProfile();
+  }, []);
 
   const handleInputChange = (field: keyof ProviderProfile) => (value: string) => {
     setProfile(prev => ({ ...prev, [field]: value }));

@@ -214,7 +214,6 @@ export default function RootLayout() {
           <Stack.Screen name="(provider)" />
           <Stack.Screen name="notification" />
           <Stack.Screen name="welcome" />
-          <Stack.Screen name="provider/edit-profile" />
 
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
