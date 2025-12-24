@@ -135,14 +135,25 @@ export default function ProviderProfileScreen() {
   };
 
   const handleVerificationStatus = () => {
-    Alert.alert(
-      'Verification Status',
-      `Your account is ${profile?.verification_status === 'verified' ? '✓ Verified' : '⏳ Pending Review'}\n\n` +
-      (profile?.verification_status !== 'verified' 
-        ? 'We are reviewing your documents. This usually takes 2-3 business days.'
-        : 'Your account has been verified. You can now accept jobs and receive payments.'),
-      [{ text: 'OK' }]
-    );
+    let title = 'Verification Status';
+    let message = 'Your account status is currently unverified.';
+
+    switch (profile?.verification_status) {
+      case 'verified':
+        title = '✓ Account Verified';
+        message = 'Congratulations! Your account is verified, and you have full access to all features.';
+        break;
+      case 'pending':
+        title = '⏳ Verification Pending';
+        message = 'Your documents are under review. This typically takes 2-3 business days. We appreciate your patience.';
+        break;
+      case 'rejected':
+        title = '⚠️ Action Required';
+        message = 'Your verification could not be completed. Please check your email for details on the required actions.';
+        break;
+    }
+
+    Alert.alert(title, message, [{ text: 'OK' }]);
   };
 
   const handleBusinessInfo = () => {
