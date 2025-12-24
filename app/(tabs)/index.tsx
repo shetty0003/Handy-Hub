@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '../../utils/supabase';
+import { getUserProfile } from '../../utils/profileHelper';
 import {
+  ActivityIndicator,
   Dimensions,
   ScrollView,
   StyleSheet,
@@ -33,16 +36,31 @@ const serviceCategories: ServiceCategory[] = [
 ];
 
 export default function HomePage() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const profile = await getUserProfile(user.id);
+        setUser(profile);
+      }
+      setLoading(false);
+    };
+
+    fetchUser();
+  }, []);
+
   const handleServicePress = (serviceName: string) => {
-    console.log('Selected service:', serviceName);
-    // Navigate to service details or booking screen
+    router.push('/serviceselectionscreen');
   };
 
   const handleProfilePress = () => {
-    console.log('Profile pressed');
+    router.push('/(tabs)/profile');
   };
 
   const handleNotificationPress = () => {
@@ -63,7 +81,7 @@ export default function HomePage() {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.greeting}>Hello, User!</Text>
+              <Text style={styles.greeting}>Hello, {user?.full_name || 'User'}!</Text>
               <Text style={styles.subtitle}>What service do you need today?</Text>
             </View>
             <View style={styles.headerIcons}>
@@ -229,7 +247,11 @@ export default function HomePage() {
         </ScrollView>
 
         {/* Floating Action Button */}
-        <TouchableOpacity style={styles.fab} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.fab}
+          activeOpacity={0.8}
+          onPress={() => router.push('/needservice')}
+        >
           <LinearGradient
             colors={['#14b8a6', '#0d9488']}
             style={styles.fabGradient}

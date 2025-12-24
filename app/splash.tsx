@@ -57,43 +57,27 @@ export default function SplashScreen() {
       ])
     ).start();
 
-    checkFirstTimeAndSession();
-  }, []);
+    const checkFirstTime = async () => {
+      try {
+        setStatusText('Checking preferences...');
+        const hasSeenWelcome = await AsyncStorage.getItem(FIRST_TIME_KEY);
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
-  // In app/splash.tsx, update the session check:
-const checkFirstTimeAndSession = async () => {
-  try {
-    setStatusText('Checking preferences...');
-    
-    const hasSeenWelcome = await AsyncStorage.getItem(FIRST_TIME_KEY);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    if (hasSeenWelcome === null) {
-      // First time user
-      setStatusText('Setting up your experience...');
-      await AsyncStorage.setItem(FIRST_TIME_KEY, 'true');
-      router.replace('/welcome');
-      return;
-    }
-    
-    // Returning user - check session but let _layout.tsx handle navigation
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session?.user) {
-      // User is logged in - _layout.tsx will handle navigation
-      // We'll stay on splash briefly, then _layout will navigate
-      setStatusText('Welcome back!');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } else {
-      // Not logged in - go to login
-      router.replace('/auth/login');
-    }
-    
-  } catch (error) {
-    console.error('Splash screen error:', error);
-    router.replace('/auth/login');
-  }
-};
+        if (hasSeenWelcome === null) {
+          setStatusText('Setting up your experience...');
+          await AsyncStorage.setItem(FIRST_TIME_KEY, 'true');
+          router.replace('/welcome');
+        } else {
+          router.replace('/auth/login');
+        }
+      } catch (error) {
+        console.error('Splash screen error:', error);
+        router.replace('/auth/login');
+      }
+    };
+
+    checkFirstTime();
+  }, []);
 
   return (
     <LinearGradient

@@ -2,8 +2,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '../../utils/supabase';
+import { getUserProfile } from '../../utils/profileHelper';
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -26,25 +29,30 @@ interface MenuItem {
 }
 
 export default function ClientProfileScreen() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: () => {
-            console.log('User logged out');
-            router.replace('/auth/login');
-          }
-        }
-      ]
-    );
+  useEffect(() => {
+    const fetchUser = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const profile = await getUserProfile(user.id);
+        setUser(profile);
+      }
+      setLoading(false);
+    };
+
+    fetchUser();
+  }, []);
+
+  const handleLogout = async () => {
+    setLoading(true);
+    await supabase.auth.signOut();
+    router.replace('/auth/login');
+    setLoading(false);
   };
 
   const accountMenuItems: MenuItem[] = [
@@ -234,21 +242,24 @@ export default function ClientProfileScreen() {
           </View>
 
           {/* Profile Card */}
-          <View style={styles.profileCard}>
-            <LinearGradient
-              colors={['#14b8a6', '#0d9488']}
-              style={styles.profileGradient}
-            >
-              <View style={styles.profileAvatar}>
-                <Ionicons name="person" size={48} color="white" />
-                <TouchableOpacity style={styles.editAvatarButton}>
-                  <Ionicons name="camera" size={16} color="white" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.profileName}>Sarah Johnson</Text>
-              <Text style={styles.profileEmail}>sarah.johnson@example.com</Text>
-              
-              <View style={styles.profileStats}>
+          {loading ? (
+            <ActivityIndicator size="large" color="#0d9488" style={{ marginTop: 50 }} />
+          ) : (
+            <View style={styles.profileCard}>
+              <LinearGradient
+                colors={['#14b8a6', '#0d9488']}
+                style={styles.profileGradient}
+              >
+                <View style={styles.profileAvatar}>
+                  <Ionicons name="person" size={48} color="white" />
+                  <TouchableOpacity style={styles.editAvatarButton}>
+                    <Ionicons name="camera" size={16} color="white" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.profileName}>{user?.full_name || 'User'}</Text>
+                <Text style={styles.profileEmail}>{user?.email || ''}</Text>
+
+                <View style={styles.profileStats}>
                 <View style={styles.statItem}>
                   <Text style={styles.statValue}>24</Text>
                   <Text style={styles.statLabel}>Bookings</Text>

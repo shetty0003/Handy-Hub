@@ -40,48 +40,31 @@ export default function ForgotPasswordPage() {
     return emailRegex.test(email);
   };
 
-  // In forgotpassword.tsx, update handleResetPassord:
-
-// In your handleResetPassword function:
 const handleResetPassword = async () => {
-  if (!email.trim()) {
-    Alert.alert('Error', 'Please enter your email address');
-    return;
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email.trim())) {
-    Alert.alert('Error', 'Please enter a valid email address');
-    return;
-  }
-
-  setLoading(true);
-  try {
-    // Use your app's scheme
-    const redirectTo = `handyhub://reset-password`;
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: redirectTo,
-    });
-
-    if (error) {
-      Alert.alert('Error', error.message);
+    if (!validateEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
-    setIsSubmitted(true);
-    Alert.alert(
-      'Email Sent!',
-      'Password reset instructions have been sent to your email.',
-      [{ text: 'OK' }]
-    );
-  } catch (error) {
-    Alert.alert('Error', 'An unexpected error occurred');
-    console.error('Reset password error:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    try {
+      const redirectTo = `handyhub://reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo,
+      });
+
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        setIsSubmitted(true);
+        Alert.alert('Email Sent!', 'Password reset instructions have been sent to your email.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
   const handleBackToLogin = () => {
     router.replace('/auth/login');
   };
@@ -184,11 +167,12 @@ const handleResetPassword = async () => {
                 {/* Resend Button */}
                 <TouchableOpacity 
                   style={styles.resendButton}
-                  onPress={() => {
-                    Alert.alert('Email Resent', 'Please check your inbox again.');
-                  }}
+                  onPress={handleResetPassword}
+                  disabled={loading}
                 >
-                  <Text style={styles.resendButtonText}>Didnt receive? Resend Email</Text>
+                  <Text style={styles.resendButtonText}>
+                    {loading ? 'Sending...' : "Didn't receive? Resend Email"}
+                  </Text>
                 </TouchableOpacity>
 
                 {/* Back to Login */}

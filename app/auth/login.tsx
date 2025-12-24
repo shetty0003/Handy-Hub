@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ensureUserProfile, getUserProfile } from '../../utils/profileHelper';
+import { getUserProfile } from '../../utils/profileHelper';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -57,39 +57,6 @@ export default function LoginPage() {
       email: email.trim(),
       password: password,
     });
-    if (authData.user) {
-  // Get or create user profile
-  let profile;
-  try {
-    profile = await ensureUserProfile(
-      authData.user.id,
-      authData.user.email!,
-      authData.user.user_metadata
-    );
-  } catch (error) {
-    console.error('Profile error:', error);
-    // Use default profile for routing
-    profile = {
-      user_type: authData.user.user_metadata?.user_type || 'customer',
-      verification_status: 'unverified'
-    };
-  }
-
-  // Route based on user type
-  if (profile.user_type === 'provider') {
-    if (profile.verification_status !== 'verified') {
-      Alert.alert(
-        'Account Under Review',
-        'Your provider account is still under review.',
-        [{ text: 'OK', onPress: () => router.replace('/(provider-tabs)') }]
-      );
-    } else {
-      router.replace('/(provider-tabs)');
-    }
-  } else {
-    router.replace('/(tabs)');
-  }
-}
 
     if (authError) {
       if (authError.message.includes('Invalid login credentials')) {
@@ -118,63 +85,7 @@ export default function LoginPage() {
       return;
     }
 
-    // 2. Try to get user profile with retry logic
-    let profile = null;
-    let retries = 3;
-    let delay = 500;
-
-    while (retries > 0) {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('user_type, verification_status')
-          .eq('id', authData.user.id)
-          .maybeSingle(); // Use maybeSingle instead of single
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('Profile fetch error:', error);
-          break;
-        }
-
-        if (data) {
-          profile = data;
-          break;
-        }
-
-        // If no profile found, wait and retry
-        await new Promise(resolve => setTimeout(resolve, delay));
-        retries--;
-        delay *= 2; // Exponential backoff
-      } catch (error) {
-        console.error('Profile fetch attempt error:', error);
-        retries--;
-      }
-    }
-
-    // 3. If still no profile, create one
-    if (!profile) {
-      console.log('No profile found, creating one...');
-      
-      const { data: newProfile, error: createError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          email: authData.user.email,
-          full_name: authData.user.user_metadata?.full_name || 'User',
-          user_type: 'customer', // Default to customer
-          verification_status: 'unverified',
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        console.error('Profile creation error:', createError);
-        // Continue anyway - user can still use the app
-        profile = { user_type: 'customer', verification_status: 'unverified' };
-      } else {
-        profile = newProfile;
-      }
-    }
+    const profile = await getUserProfile(authData.user.id);
 
     // 4. Route based on user type
     if (profile?.user_type === 'provider') {
