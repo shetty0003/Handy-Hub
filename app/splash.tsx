@@ -14,7 +14,7 @@ import {
 import { supabase } from '../utils/supabase';
 
 const FIRST_TIME_KEY = '@handy_hub_first_time';
-// AsyncStorage.removeItem(FIRST_TIME_KEY); // Uncomment to reset first time
+ //AsyncStorage.removeItem(FIRST_TIME_KEY); // Uncomment to reset first time
 
 export default function SplashScreen() {
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +115,7 @@ export default function SplashScreen() {
         ]}
       >
         <LinearGradient
-          colors={['#0ea5e9', '#3b82f6', '#6366f1']}
+          colors={['#0ee991ff', '#3bf6caff', '#63f1aaff']}
           style={styles.logoCircle}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}

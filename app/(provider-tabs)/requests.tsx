@@ -1,17 +1,22 @@
-// app/(provider-tabs)/requests.tsx
+// app/(provider-tabs)/requests.tsx - Updated version
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getJobRequestsWithService } from '../../utils/profileHelper';
+import { supabase } from '../../utils/supabase';
 
-interface Request {
+interface JobRequest {
   id: string;
   title: string;
   client: string;
@@ -20,122 +25,328 @@ interface Request {
   date: string;
   time: string;
   distance: string;
-  price: string;
+  price: number;
   description: string;
-  status: 'new' | 'accepted' | 'ongoing' | 'completed';
+  status: 'pending' | 'accepted' | 'ongoing' | 'completed' | 'cancelled' | 'declined';
   urgent: boolean;
   category: string;
+  client_id: string;
+  service_id?: string;
+  service_title?: string;
+  service_category?: string;
 }
 
-const allRequests: Request[] = [
-  {
-    id: '1',
-    title: 'Fix Kitchen Sink Leak',
-    client: 'Sarah Johnson',
-    clientRating: 4.8,
-    location: '123 Main St, Apartment 4B',
-    date: 'Today',
-    time: '2:00 PM',
-    distance: '2.5 km',
-    price: '$75',
-    description: 'Kitchen sink has been leaking for 2 days. Need urgent repair.',
-    status: 'new',
-    urgent: true,
-    category: 'Plumbing'
-  },
-  {
-    id: '2',
-    title: 'Bathroom Pipe Installation',
-    client: 'Mike Brown',
-    clientRating: 4.9,
-    location: '456 Oak Avenue',
-    date: 'Today',
-    time: '4:30 PM',
-    distance: '3.8 km',
-    price: '$120',
-    description: 'Need to install new pipes in the bathroom. Materials provided.',
-    status: 'accepted',
-    urgent: false,
-    category: 'Plumbing'
-  },
-  {
-    id: '3',
-    title: 'Water Heater Repair',
-    client: 'Emily Davis',
-    clientRating: 5.0,
-    location: '789 Pine Road',
-    date: 'Tomorrow',
-    time: '10:00 AM',
-    distance: '1.2 km',
-    price: '$200',
-    description: 'Water heater not heating properly. Seems like thermostat issue.',
-    status: 'ongoing',
-    urgent: false,
-    category: 'Plumbing'
-  },
-  {
-    id: '4',
-    title: 'Drain Cleaning Service',
-    client: 'David Wilson',
-    clientRating: 4.6,
-    location: '321 Elm Street',
-    date: 'Dec 22',
-    time: '3:00 PM',
-    distance: '5.1 km',
-    price: '$90',
-    description: 'Main drain clogged. Need professional cleaning.',
-    status: 'completed',
-    urgent: false,
-    category: 'Plumbing'
-  },
-];
-
-const tabs = ['All', 'New', 'Accepted', 'Ongoing', 'Completed'];
+const tabs = ['All', 'Pending', 'Accepted', 'Ongoing', 'Completed', 'Cancelled'];
 
 export default function ProviderRequestsScreen() {
-  const [selectedTab, setSelectedTab] = useState('All');
+  const [selectedTab, setSelectedTab] = useState('Pending');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [requests, setRequests] = useState<JobRequest[]>([]);
 
+  const fetchRequests = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await getJobRequestsWithService(user.id, selectedTab);
+
+      if (error) throw error;
+
+      const formattedRequests: JobRequest[] = (data || []).map(request => {
+        const service = request.services as any;
+        return {
+          id: request.id,
+          title: request.title || service?.title || 'Service Request',
+          client: request.profiles?.full_name || 'Client',
+          clientRating: 4.8,
+          location: request.location || 'Not specified',
+          date: new Date(request.preferred_date || request.created_at).toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+          }),
+          time: request.preferred_time || 'Flexible',
+          distance: `${Math.floor(Math.random() * 10) + 1} km`,
+          price: request.estimated_price || service?.price || 0,
+          description: request.description || 'No description provided',
+          status: request.status as any,
+          urgent: request.priority === 'urgent',
+          category: service?.category || request.category || 'General',
+          client_id: request.client_id,
+          service_id: request.service_id,
+          service_title: service?.title,
+          service_category: service?.category
+        };
+      });
+
+      setRequests(formattedRequests);
+
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      Alert.alert('Error', 'Failed to load job requests');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, [selectedTab]);
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'new': return '#f59e0b';
+      case 'pending': return '#f59e0b';
       case 'accepted': return '#3b82f6';
       case 'ongoing': return '#8b5cf6';
       case 'completed': return '#10b981';
+      case 'cancelled': return '#ef4444';
+      case 'declined': return '#64748b';
       default: return '#64748b';
     }
   };
 
   const getStatusBackground = (status: string) => {
     switch (status) {
-      case 'new': return '#fef3c7';
+      case 'pending': return '#fef3c7';
       case 'accepted': return '#dbeafe';
       case 'ongoing': return '#ede9fe';
       case 'completed': return '#d1fae5';
+      case 'cancelled': return '#fee2e2';
+      case 'declined': return '#f1f5f9';
       default: return '#f1f5f9';
     }
   };
 
-  const filteredRequests = selectedTab === 'All' 
-    ? allRequests 
-    : allRequests.filter(req => req.status === selectedTab.toLowerCase());
-
   const handleRequestPress = (requestId: string) => {
-    console.log('Request pressed:', requestId);
+    router.push(`/provider/job/${requestId}`);
   };
 
-  const handleAccept = (requestId: string) => {
-    console.log('Accept request:', requestId);
+  const handleAccept = async (requestId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      Alert.alert(
+        'Accept Job',
+        'Are you sure you want to accept this job?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Accept',
+            style: 'default',
+            onPress: async () => {
+              const { error } = await supabase
+                .from('job_requests')
+                .update({ 
+                  status: 'accepted',
+                  provider_id: user.id,
+                  accepted_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Job accepted successfully!');
+              fetchRequests();
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Accept job error:', error);
+      Alert.alert('Error', 'Failed to accept job');
+    }
   };
 
-  const handleDecline = (requestId: string) => {
-    console.log('Decline request:', requestId);
+  const handleDecline = async (requestId: string) => {
+    try {
+      Alert.alert(
+        'Decline Job',
+        'Are you sure you want to decline this job?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Decline',
+            style: 'destructive',
+            onPress: async () => {
+              const { error } = await supabase
+                .from('job_requests')
+                .update({ 
+                  status: 'declined',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Job declined');
+              fetchRequests();
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Decline job error:', error);
+      Alert.alert('Error', 'Failed to decline job');
+    }
   };
+
+  const handleStartJob = async (requestId: string) => {
+    try {
+      Alert.alert(
+        'Start Job',
+        'Mark this job as started?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Start',
+            style: 'default',
+            onPress: async () => {
+              const { error } = await supabase
+                .from('job_requests')
+                .update({ 
+                  status: 'ongoing',
+                  started_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Job marked as started');
+              fetchRequests();
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Start job error:', error);
+      Alert.alert('Error', 'Failed to start job');
+    }
+  };
+
+  const handleCompleteJob = async (requestId: string) => {
+    try {
+      Alert.alert(
+        'Complete Job',
+        'Mark this job as completed?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Complete',
+            style: 'default',
+            onPress: async () => {
+              const { error } = await supabase
+                .from('job_requests')
+                .update({ 
+                  status: 'completed',
+                  completed_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Job marked as completed');
+              fetchRequests();
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Complete job error:', error);
+      Alert.alert('Error', 'Failed to complete job');
+    }
+  };
+
+  const renderActionButtons = (request: JobRequest) => {
+    switch (request.status) {
+      case 'pending':
+        return (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.declineButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDecline(request.id);
+              }}
+            >
+              <Ionicons name="close" size={18} color="#64748b" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.acceptButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleAccept(request.id);
+              }}
+            >
+              <LinearGradient
+                colors={['#14b8a6', '#0d9488']}
+                style={styles.acceptGradient}
+              >
+                <Ionicons name="checkmark" size={18} color="white" />
+                <Text style={styles.acceptText}>Accept</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        );
+      case 'accepted':
+        return (
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleStartJob(request.id);
+            }}
+          >
+            <LinearGradient
+              colors={['#3b82f6', '#2563eb']}
+              style={styles.startGradient}
+            >
+              <Ionicons name="play" size={18} color="white" />
+              <Text style={styles.startText}>Start Job</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        );
+      case 'ongoing':
+        return (
+          <TouchableOpacity
+            style={styles.completeButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleCompleteJob(request.id);
+            }}
+          >
+            <LinearGradient
+              colors={['#10b981', '#059669']}
+              style={styles.completeGradient}
+            >
+              <Ionicons name="checkmark-circle" size={18} color="white" />
+              <Text style={styles.completeText}>Complete</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        );
+      default:
+        return null;
+    }
+  };
+
+  if (loading) {
+    return (
+      <LinearGradient colors={['#f0fdfa', '#ecfdf5']} style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0d9488" />
+            <Text style={styles.loadingText}>Loading requests...</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
-    <LinearGradient
-      colors={['#f0fdfa', '#ecfdf5']}
-      style={styles.container}
-    >
+    <LinearGradient colors={['#f0fdfa', '#ecfdf5']} style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
@@ -176,14 +387,19 @@ export default function ProviderRequestsScreen() {
           style={styles.requestsList}
           showsVerticalScrollIndicator={false}
         >
-          {filteredRequests.length === 0 ? (
+          {requests.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="file-tray-outline" size={64} color="#cbd5e1" />
               <Text style={styles.emptyText}>No requests found</Text>
-              <Text style={styles.emptySubtext}>New requests will appear here</Text>
+              <Text style={styles.emptySubtext}>
+                {selectedTab === 'Pending' 
+                  ? 'New requests will appear here' 
+                  : `No ${selectedTab.toLowerCase()} jobs`
+                }
+              </Text>
             </View>
           ) : (
-            filteredRequests.map((request) => (
+            requests.map((request) => (
               <TouchableOpacity
                 key={request.id}
                 style={styles.requestCard}
@@ -206,7 +422,7 @@ export default function ProviderRequestsScreen() {
                       <Text style={styles.clientName}>{request.client}</Text>
                       <View style={styles.ratingContainer}>
                         <Ionicons name="star" size={14} color="#f59e0b" />
-                        <Text style={styles.ratingText}>{request.clientRating}</Text>
+                        <Text style={styles.ratingText}>{request.clientRating.toFixed(1)}</Text>
                       </View>
                     </View>
                   </View>
@@ -247,45 +463,26 @@ export default function ProviderRequestsScreen() {
                     </Text>
                   </View>
                 </View>
+                {request.service_title && (
+    <View style={styles.serviceInfo}>
+      <Ionicons name="construct-outline" size={14} color="#0d9488" />
+      <Text style={styles.serviceText}>
+        Service: {request.service_title} {request.service_category ? `(${request.service_category})` : ''}
+      </Text>
+    </View>
+  )}
 
                 <View style={styles.requestFooter}>
                   <View style={styles.priceContainer}>
                     <Text style={styles.priceLabel}>Job Price</Text>
-                    <Text style={styles.priceValue}>{request.price}</Text>
+                    <Text style={styles.priceValue}>${request.price.toFixed(2)}</Text>
                   </View>
-
-                  {request.status === 'new' && (
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity
-                        style={styles.declineButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleDecline(request.id);
-                        }}
-                      >
-                        <Ionicons name="close" size={18} color="#64748b" />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.acceptButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleAccept(request.id);
-                        }}
-                      >
-                        <LinearGradient
-                          colors={['#14b8a6', '#0d9488']}
-                          style={styles.acceptGradient}
-                        >
-                          <Ionicons name="checkmark" size={18} color="white" />
-                          <Text style={styles.acceptText}>Accept</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  {renderActionButtons(request)}
                 </View>
               </TouchableOpacity>
             ))
           )}
+          
 
           <View style={styles.bottomSpacing} />
         </ScrollView>
@@ -295,11 +492,16 @@ export default function ProviderRequestsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  safeArea: {
-    flex: 1,
+  loadingText: {
+    marginTop: 12,
+    color: '#64748b',
   },
   header: {
     flexDirection: 'row',
@@ -355,6 +557,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
   },
+  
   tabTextActive: {
     color: 'white',
   },
@@ -376,7 +579,7 @@ const styles = StyleSheet.create({
   },
   urgentBadge: {
     position: 'absolute',
-    top: 50,
+    top: 12,
     right: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -528,6 +731,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'white',
   },
+  startButton: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  startGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  startText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  completeButton: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  completeGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  completeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -543,6 +778,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#94a3b8',
     marginTop: 8,
+  },
+  serviceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+    backgroundColor: '#f0fdfa',
+    padding: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  serviceText: {
+    fontSize: 12,
+    color: '#0d9488',
+    fontWeight: '500',
   },
   bottomSpacing: {
     height: 20,

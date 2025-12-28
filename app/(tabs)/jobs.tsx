@@ -80,7 +80,7 @@ export default function ClientJobsScreen() {
             icon: 'hammer', // Placeholder
             iconColor: '#8b5cf6', // Placeholder
           }));
-          setBookingsData(formattedBookings);
+          setBookingsData(formattedBookings as any) ;
         }
       }
       setLoading(false);

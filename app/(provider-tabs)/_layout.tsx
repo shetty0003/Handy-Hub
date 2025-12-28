@@ -1,7 +1,7 @@
-// app/(provider-tabs)/_layout.tsx
+// app/(provider-tabs)/_layout.tsx - Add services tab
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
 
 export default function ProviderTabLayout() {
   return (
@@ -43,6 +43,15 @@ export default function ProviderTabLayout() {
           title: 'Earnings',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="wallet" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="services"
+        options={{
+          title: 'Services',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="construct" size={size} color={color} />
           ),
         }}
       />

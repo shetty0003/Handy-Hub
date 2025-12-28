@@ -1,16 +1,20 @@
-// app/(provider-tabs)/earnings.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
   TouchableOpacity, 
   View,
   ScrollView,
-  Dimensions
+  Dimensions,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
+import { router } from 'expo-router';
+import { supabase } from '../../utils/supabase';
+import { getUserProfile } from '../../utils/profileHelper';
 
 const { width } = Dimensions.get('window');
 
@@ -19,34 +23,172 @@ interface Transaction {
   title: string;
   client: string;
   date: string;
-  amount: string;
-  status: 'completed' | 'pending' | 'withdrawn';
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
   type: 'earning' | 'withdrawal';
 }
 
-const transactions: Transaction[] = [
-  { id: '1', title: 'Kitchen Sink Repair', client: 'Sarah Johnson', date: 'Dec 19, 2:30 PM', amount: '+$75', status: 'completed', type: 'earning' },
-  { id: '2', title: 'Withdrawal to Bank', client: '', date: 'Dec 18, 10:00 AM', amount: '-$500', status: 'withdrawn', type: 'withdrawal' },
-  { id: '3', title: 'Bathroom Plumbing', client: 'Mike Brown', date: 'Dec 17, 4:30 PM', amount: '+$120', status: 'completed', type: 'earning' },
-  { id: '4', title: 'Water Heater Repair', client: 'Emily Davis', date: 'Dec 16, 10:00 AM', amount: '+$200', status: 'pending', type: 'earning' },
-  { id: '5', title: 'Drain Cleaning', client: 'David Wilson', date: 'Dec 15, 3:00 PM', amount: '+$90', status: 'completed', type: 'earning' },
-  { id: '6', title: 'Pipe Installation', client: 'Lisa Anderson', date: 'Dec 14, 1:00 PM', amount: '+$150', status: 'completed', type: 'earning' },
-];
+interface EarningsStats {
+  availableBalance: number;
+  pendingBalance: number;
+  totalEarned: number;
+  withdrawnAmount: number;
+  weeklyEarnings: number;
+  jobsCompleted: number;
+}
 
 const periods = ['This Week', 'This Month', 'This Year', 'All Time'];
 
 export default function ProviderEarningsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('This Month');
+  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [stats, setStats] = useState<EarningsStats>({
+    availableBalance: 0,
+    pendingBalance: 0,
+    totalEarned: 0,
+    withdrawnAmount: 0,
+    weeklyEarnings: 0,
+    jobsCompleted: 0
+  });
 
-  const handleWithdraw = () => {
-    console.log('Withdraw funds');
+  const fetchEarningsData = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get provider stats
+      const { provider } = await getUserProfile(user.id);
+      if (provider) {
+        setStats({
+          availableBalance: provider.available_balance || 0,
+          pendingBalance: provider.pending_balance || 0,
+          totalEarned: provider.total_earnings || 0,
+          withdrawnAmount: (provider.total_earnings || 0) - (provider.available_balance || 0),
+          weeklyEarnings: provider.weekly_earnings || 0,
+          jobsCompleted: provider.completed_jobs || 0
+        });
+      }
+
+      // Get recent transactions
+      const { data: earnings, error } = await supabase
+        .from('earnings')
+        .select(`
+          *,
+          job_requests (
+            title
+          )
+        `)
+        .eq('provider_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+
+      const formattedTransactions: Transaction[] = (earnings || []).map(earning => {
+        const job = earning.job_requests as any;
+        return {
+          id: earning.id,
+          title: job?.title || (earning.type === 'withdrawal' ? 'Withdrawal' : 'Service'),
+          client: 'Client', // You might want to fetch client name here
+          date: new Date(earning.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+          }),
+          amount: earning.amount,
+          status: earning.status as any,
+          type: earning.type as any
+        };
+      });
+
+      setTransactions(formattedTransactions);
+
+    } catch (error) {
+      console.error('Error fetching earnings:', error);
+      Alert.alert('Error', 'Failed to load earnings data');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    fetchEarningsData();
+  }, []);
+
+  const handleWithdraw = async () => {
+    if (stats.availableBalance <= 0) {
+      Alert.alert('No Funds', 'You have no available balance to withdraw');
+      return;
+    }
+
+    Alert.alert(
+      'Withdraw Funds',
+      `Are you sure you want to withdraw $${stats.availableBalance.toFixed(2)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) return;
+
+              // Create withdrawal record
+              const { error } = await supabase
+                .from('earnings')
+                .insert({
+                  provider_id: user.id,
+                  amount: stats.availableBalance,
+                  type: 'withdrawal',
+                  status: 'pending',
+                  description: 'Withdrawal to bank account'
+                });
+
+              if (error) throw error;
+
+              // Update provider balance (simplified - you might want to add pending_balance logic)
+              const { error: updateError } = await supabase
+                .from('providers')
+                .update({ 
+                  available_balance: 0,
+                  pending_balance: stats.availableBalance
+                })
+                .eq('id', user.id);
+
+              if (updateError) throw updateError;
+
+              Alert.alert('Success', 'Withdrawal request submitted!');
+              fetchEarningsData();
+            } catch (error) {
+              console.error('Withdrawal error:', error);
+              Alert.alert('Error', 'Failed to process withdrawal');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <LinearGradient colors={['#f0fdfa', '#ecfdf5']} style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0d9488" />
+            <Text style={styles.loadingText}>Loading earnings...</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
   return (
-    <LinearGradient
-      colors={['#f0fdfa', '#ecfdf5']}
-      style={styles.container}
-    >
+    <LinearGradient colors={['#f0fdfa', '#ecfdf5']} style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView 
           style={styles.scrollView}
@@ -55,7 +197,10 @@ export default function ProviderEarningsScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Earnings</Text>
-            <TouchableOpacity style={styles.historyButton}>
+            <TouchableOpacity 
+              style={styles.historyButton}
+              onPress={() => router.push('/provider/earnings/history')}
+            >
               <Ionicons name="time-outline" size={24} color="#0d9488" />
             </TouchableOpacity>
           </View>
@@ -71,12 +216,15 @@ export default function ProviderEarningsScreen() {
               <View style={styles.balanceContent}>
                 <View style={styles.balanceInfo}>
                   <Text style={styles.balanceLabel}>Available Balance</Text>
-                  <Text style={styles.balanceAmount}>$1,245.50</Text>
-                  <Text style={styles.balanceSubtext}>+$185 this week</Text>
+                  <Text style={styles.balanceAmount}>${stats.availableBalance.toFixed(2)}</Text>
+                  <Text style={styles.balanceSubtext}>
+                    {stats.weeklyEarnings > 0 ? `+$${stats.weeklyEarnings} this week` : 'No earnings this week'}
+                  </Text>
                 </View>
                 <TouchableOpacity 
                   style={styles.withdrawButton}
                   onPress={handleWithdraw}
+                  disabled={stats.availableBalance <= 0}
                 >
                   <Text style={styles.withdrawText}>Withdraw</Text>
                   <Ionicons name="arrow-forward" size={16} color="#0d9488" />
@@ -91,50 +239,24 @@ export default function ProviderEarningsScreen() {
               <View style={styles.statIcon}>
                 <Ionicons name="trending-up" size={24} color="#10b981" />
               </View>
-              <Text style={styles.statValue}>$3.2k</Text>
-              <Text style={styles.statLabel}>This Month</Text>
+              <Text style={styles.statValue}>${stats.weeklyEarnings}</Text>
+              <Text style={styles.statLabel}>This Week</Text>
             </View>
             <View style={styles.statCard}>
               <View style={styles.statIcon}>
                 <Ionicons name="briefcase" size={24} color="#3b82f6" />
               </View>
-              <Text style={styles.statValue}>24</Text>
+              <Text style={styles.statValue}>{stats.jobsCompleted}</Text>
               <Text style={styles.statLabel}>Jobs Done</Text>
             </View>
             <View style={styles.statCard}>
               <View style={styles.statIcon}>
-                <Ionicons name="star" size={24} color="#f59e0b" />
+                <Ionicons name="cash-outline" size={24} color="#f59e0b" />
               </View>
-              <Text style={styles.statValue}>4.8</Text>
-              <Text style={styles.statLabel}>Avg Rating</Text>
+              <Text style={styles.statValue}>${stats.totalEarned}</Text>
+              <Text style={styles.statLabel}>Total Earned</Text>
             </View>
           </View>
-
-          {/* Period Filter */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.periodContainer}
-            contentContainerStyle={styles.periodContent}
-          >
-            {periods.map((period) => (
-              <TouchableOpacity
-                key={period}
-                style={[
-                  styles.periodChip,
-                  selectedPeriod === period && styles.periodChipActive
-                ]}
-                onPress={() => setSelectedPeriod(period)}
-              >
-                <Text style={[
-                  styles.periodText,
-                  selectedPeriod === period && styles.periodTextActive
-                ]}>
-                  {period}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
 
           {/* Quick Stats */}
           <View style={styles.quickStatsCard}>
@@ -143,7 +265,7 @@ export default function ProviderEarningsScreen() {
                 <Text style={styles.quickStatLabel}>Total Earned</Text>
                 <Ionicons name="chevron-forward" size={16} color="#64748b" />
               </View>
-              <Text style={styles.quickStatValue}>$8,450.00</Text>
+              <Text style={styles.quickStatValue}>${stats.totalEarned.toFixed(2)}</Text>
             </View>
             <View style={styles.quickStatDivider} />
             <View style={styles.quickStatItem}>
@@ -151,7 +273,9 @@ export default function ProviderEarningsScreen() {
                 <Text style={styles.quickStatLabel}>Pending</Text>
                 <Ionicons name="time-outline" size={16} color="#f59e0b" />
               </View>
-              <Text style={[styles.quickStatValue, { color: '#f59e0b' }]}>$320.00</Text>
+              <Text style={[styles.quickStatValue, { color: '#f59e0b' }]}>
+                ${stats.pendingBalance.toFixed(2)}
+              </Text>
             </View>
             <View style={styles.quickStatDivider} />
             <View style={styles.quickStatItem}>
@@ -159,7 +283,9 @@ export default function ProviderEarningsScreen() {
                 <Text style={styles.quickStatLabel}>Withdrawn</Text>
                 <Ionicons name="checkmark-circle" size={16} color="#10b981" />
               </View>
-              <Text style={[styles.quickStatValue, { color: '#10b981' }]}>$6,880.00</Text>
+              <Text style={[styles.quickStatValue, { color: '#10b981' }]}>
+                ${stats.withdrawnAmount.toFixed(2)}
+              </Text>
             </View>
           </View>
 
@@ -167,84 +293,49 @@ export default function ProviderEarningsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recent Transactions</Text>
             
-            {transactions.map((transaction) => (
-              <TouchableOpacity
-                key={transaction.id}
-                style={styles.transactionCard}
-                activeOpacity={0.7}
-              >
-                <View style={styles.transactionLeft}>
-                  <View style={[
-                    styles.transactionIcon,
-                    { backgroundColor: transaction.type === 'earning' ? '#d1fae5' : '#dbeafe' }
-                  ]}>
-                    <Ionicons 
-                      name={transaction.type === 'earning' ? 'arrow-down' : 'arrow-up'} 
-                      size={20} 
-                      color={transaction.type === 'earning' ? '#10b981' : '#3b82f6'} 
-                    />
-                  </View>
-                  <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionTitle}>{transaction.title}</Text>
-                    {transaction.client && (
-                      <Text style={styles.transactionClient}>{transaction.client}</Text>
-                    )}
-                    <Text style={styles.transactionDate}>{transaction.date}</Text>
-                  </View>
-                </View>
-                <View style={styles.transactionRight}>
-                  <Text style={[
-                    styles.transactionAmount,
-                    { color: transaction.type === 'earning' ? '#10b981' : '#3b82f6' }
-                  ]}>
-                    {transaction.amount}
-                  </Text>
-                  {transaction.status === 'pending' && (
-                    <View style={styles.pendingBadge}>
-                      <Text style={styles.pendingText}>Pending</Text>
+            {transactions.length === 0 ? (
+              <View style={styles.emptyTransactions}>
+                <Ionicons name="receipt-outline" size={48} color="#cbd5e1" />
+                <Text style={styles.emptyText}>No transactions yet</Text>
+              </View>
+            ) : (
+              transactions.map((transaction) => (
+                <View
+                  key={transaction.id}
+                  style={styles.transactionCard}
+                >
+                  <View style={styles.transactionLeft}>
+                    <View style={[
+                      styles.transactionIcon,
+                      { backgroundColor: transaction.type === 'earning' ? '#d1fae5' : '#dbeafe' }
+                    ]}>
+                      <Ionicons 
+                        name={transaction.type === 'earning' ? 'arrow-down' : 'arrow-up'} 
+                        size={20} 
+                        color={transaction.type === 'earning' ? '#10b981' : '#3b82f6'} 
+                      />
                     </View>
-                  )}
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.transactionTitle}>{transaction.title}</Text>
+                      <Text style={styles.transactionDate}>{transaction.date}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.transactionRight}>
+                    <Text style={[
+                      styles.transactionAmount,
+                      { color: transaction.type === 'earning' ? '#10b981' : '#3b82f6' }
+                    ]}>
+                      {transaction.type === 'earning' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                    </Text>
+                    {transaction.status === 'pending' && (
+                      <View style={styles.pendingBadge}>
+                        <Text style={styles.pendingText}>Pending</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Payment Methods */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Payment Methods</Text>
-              <TouchableOpacity>
-                <Text style={styles.addText}>Add New</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.paymentCard}>
-              <View style={styles.paymentLeft}>
-                <View style={styles.paymentIcon}>
-                  <Ionicons name="card" size={24} color="#0d9488" />
-                </View>
-                <View>
-                  <Text style={styles.paymentTitle}>Bank Account</Text>
-                  <Text style={styles.paymentSubtitle}>**** **** 1234</Text>
-                </View>
-              </View>
-              <View style={styles.defaultBadge}>
-                <Text style={styles.defaultText}>Default</Text>
-              </View>
-            </View>
-
-            <View style={styles.paymentCard}>
-              <View style={styles.paymentLeft}>
-                <View style={styles.paymentIcon}>
-                  <Ionicons name="wallet" size={24} color="#0d9488" />
-                </View>
-                <View>
-                  <Text style={styles.paymentTitle}>PayPal</Text>
-                  <Text style={styles.paymentSubtitle}>john.doe@email.com</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
-            </View>
+              ))
+            )}
           </View>
 
           <View style={styles.bottomSpacing} />
@@ -254,15 +345,19 @@ export default function ProviderEarningsScreen() {
   );
 }
 
+// Styles remain mostly the same...
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  scrollView: { flex: 1 },
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  safeArea: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
+  loadingText: {
+    marginTop: 12,
+    color: '#64748b',
   },
   header: {
     flexDirection: 'row',
@@ -301,17 +396,13 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
-  balanceGradient: {
-    padding: 24,
-  },
+  balanceGradient: { padding: 24 },
   balanceContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  balanceInfo: {
-    flex: 1,
-  },
+  balanceInfo: { flex: 1 },
   balanceLabel: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
@@ -378,12 +469,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
   },
-  periodContainer: {
-    marginBottom: 16,
-  },
-  periodContent: {
-    paddingHorizontal: 20,
-  },
+  periodContainer: { marginBottom: 16 },
+  periodContent: { paddingHorizontal: 20 },
   periodChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -402,9 +489,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
   },
-  periodTextActive: {
-    color: 'white',
-  },
+  periodTextActive: { color: 'white' },
   quickStatsCard: {
     backgroundColor: 'white',
     marginHorizontal: 20,
@@ -417,9 +502,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  quickStatItem: {
-    paddingVertical: 12,
-  },
+  quickStatItem: { paddingVertical: 12 },
   quickStatRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -439,27 +522,13 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#f1f5f9',
   },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+  section: { marginBottom: 24 },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#0d9488',
     paddingHorizontal: 20,
     marginBottom: 16,
-  },
-  addText: {
-    fontSize: 14,
-    color: '#0d9488',
-    fontWeight: '600',
   },
   transactionCard: {
     flexDirection: 'row',
@@ -489,9 +558,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  transactionInfo: {
-    flex: 1,
-  },
+  transactionInfo: { flex: 1 },
   transactionTitle: {
     fontSize: 15,
     fontWeight: '600',
@@ -507,9 +574,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
   },
-  transactionRight: {
-    alignItems: 'flex-end',
-  },
+  transactionRight: { alignItems: 'flex-end' },
   transactionAmount: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -526,57 +591,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#92400e',
   },
-  paymentCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyTransactions: {
     alignItems: 'center',
-    backgroundColor: 'white',
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 40,
   },
-  paymentLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  paymentIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f0fdfa',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  paymentTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  paymentSubtitle: {
-    fontSize: 13,
+  emptyText: {
+    fontSize: 16,
     color: '#64748b',
+    marginTop: 12,
   },
-  defaultBadge: {
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  defaultText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#065f46',
-  },
-  bottomSpacing: {
-    height: 100,
-  },
+  bottomSpacing: { height: 100 },
 });

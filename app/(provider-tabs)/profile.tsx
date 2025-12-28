@@ -10,10 +10,13 @@ import {
     Text,
     TouchableOpacity,
     View,
-    Image
+    Image,
+    ActivityIndicator,
+    RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
+import { getUserProfile, UserProfile, ProviderInfo } from '../../utils/profileHelper';
 
 interface MenuItem {
   id: string;
@@ -28,35 +31,13 @@ interface MenuItem {
   badgeColor?: string;
 }
 
-interface UserProfile {
-  id: string;
-  full_name: string;
-  email: string;
-  phone?: string;
-  user_type: string;
-  verification_status: string;
-  created_at: string;
-}
-
-interface ProviderInfo {
-  id: string;
-  business_name: string;
-  business_type: string;
-  business_address?: string;
-  years_of_experience?: number;
-  license_number?: string;
-  tax_id?: string;
-  rating: number;
-  total_jobs: number;
-  is_verified: boolean;
-}
-
 export default function ProviderProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [availableStatus, setAvailableStatus] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
+  const [provider, setProvider] = useState<ProviderInfo | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,30 +46,16 @@ export default function ProviderProfileScreen() {
 
   const loadUserProfile = async () => {
     try {
+      setRefreshing(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      const result = await getUserProfile(user.id);
+      setProfile(result.profile);
+      setProvider(result.provider);
 
-      if (profileError) throw profileError;
-      setProfile(profileData);
-
-      // Load provider info
-      const { data: providerData, error: providerError } = await supabase
-        .from('providers')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (providerError) {
-        console.error('Provider info error:', providerError);
-      } else {
-        setProviderInfo(providerData);
+      if (result.provider?.is_available !== undefined) {
+        setAvailableStatus(result.provider.is_available);
       }
 
       // Try to load profile image
@@ -101,6 +68,9 @@ export default function ProviderProfileScreen() {
       }
     } catch (error) {
       console.error('Profile load error:', error);
+      Alert.alert('Error', 'Failed to load profile');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -131,14 +101,16 @@ export default function ProviderProfileScreen() {
   };
 
   const handleEditProfile = () => {
-    router.push('/');
+    router.push('/provider/profile/edit');
   };
 
   const handleVerificationStatus = () => {
     let title = 'Verification Status';
     let message = 'Your account status is currently unverified.';
 
-    switch (profile?.verification_status) {
+    const status = provider?.verification_status || profile?.verification_status || 'pending';
+    
+    switch (status) {
       case 'verified':
         title = '✓ Account Verified';
         message = 'Congratulations! Your account is verified, and you have full access to all features.';
@@ -177,7 +149,7 @@ export default function ProviderProfileScreen() {
   };
 
   const handleEarnings = () => {
-    router.push('/provider/earnings');
+    router.push('/(provider-tabs)/earnings');
   };
 
   const handleReviews = () => {
@@ -188,13 +160,21 @@ export default function ProviderProfileScreen() {
     router.push('/provider/support');
   };
 
-  const handleAvailableToggle = () => {
-    setAvailableStatus(!availableStatus);
-    // TODO: Update availability in Supabase
-    supabase
-      .from('providers')
-      .update({ is_available: !availableStatus })
-      .eq('user_id', profile?.id);
+  const handleAvailableToggle = async (value: boolean) => {
+    try {
+      setAvailableStatus(value);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('providers')
+        .update({ is_available: value })
+        .eq('id', user.id);
+    } catch (error) {
+      console.error('Update availability error:', error);
+      setAvailableStatus(!value);
+      Alert.alert('Error', 'Failed to update availability');
+    }
   };
 
   const providerMenuItems: MenuItem[] = [
@@ -237,11 +217,11 @@ export default function ProviderProfileScreen() {
       id: '5',
       title: 'Verification Status',
       icon: 'shield-checkmark-outline',
-      subtitle: profile?.verification_status === 'verified' ? 'Verified ✓' : 'Pending review',
+      subtitle: (provider?.verification_status === 'verified' || profile?.verification_status === 'verified') ? 'Verified ✓' : 'Pending review',
       action: handleVerificationStatus,
       showArrow: true,
       showBadge: true,
-      badgeColor: profile?.verification_status === 'verified' ? '#10b981' : '#f59e0b',
+      badgeColor: (provider?.verification_status === 'verified' || profile?.verification_status === 'verified') ? '#10b981' : '#f59e0b',
     },
     {
       id: '6',
@@ -263,7 +243,7 @@ export default function ProviderProfileScreen() {
       id: '8',
       title: 'Reviews',
       icon: 'star-outline',
-      subtitle: `${providerInfo?.rating || 0}/5 (${providerInfo?.total_jobs || 0} jobs)`,
+      subtitle: `${provider?.rating?.toFixed(1) || 0}/5 (${provider?.completed_jobs || 0} jobs)`,
       action: handleReviews,
       showArrow: true,
     },
@@ -275,7 +255,7 @@ export default function ProviderProfileScreen() {
       title: 'Available for Jobs',
       icon: availableStatus ? 'checkmark-circle-outline' : 'close-circle-outline',
       subtitle: availableStatus ? 'Accepting new jobs' : 'Not available',
-      action: handleAvailableToggle,
+      action: () => handleAvailableToggle(!availableStatus),
       showSwitch: true,
       switchValue: availableStatus,
     },
@@ -345,11 +325,13 @@ export default function ProviderProfileScreen() {
   );
 
   const getMemberSince = () => {
-    if (!profile?.created_at) return 'Recently';
-    const createdDate = new Date(profile.created_at);
+    const createdDate = profile?.created_at;
+    if (!createdDate) return 'Recently';
+    
+    const date = new Date(createdDate);
     const now = new Date();
-    const diffInMonths = (now.getFullYear() - createdDate.getFullYear()) * 12 + 
-                         (now.getMonth() - createdDate.getMonth());
+    const diffInMonths = (now.getFullYear() - date.getFullYear()) * 12 + 
+                         (now.getMonth() - date.getMonth());
     
     if (diffInMonths < 1) return 'New';
     if (diffInMonths < 12) return `${diffInMonths} month${diffInMonths > 1 ? 's' : ''}`;
@@ -359,9 +341,11 @@ export default function ProviderProfileScreen() {
   };
 
   const getVerificationBadge = () => {
-    if (!profile) return null;
+    const status = provider?.verification_status || profile?.verification_status;
     
-    switch(profile.verification_status) {
+    if (!status) return null;
+    
+    switch(status) {
       case 'verified':
         return {
           text: 'Verified',
@@ -395,15 +379,29 @@ export default function ProviderProfileScreen() {
 
   const verificationBadge = getVerificationBadge();
 
+  if (refreshing && !profile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0d9488" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
   return (
-    <LinearGradient
-      colors={['#f0fdfa', '#ecfdf5']}
-      style={styles.container}
-    >
+    <LinearGradient colors={['#f0fdfa', '#ecfdf5']} style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView 
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={loadUserProfile}
+              colors={['#0d9488']}
+              tintColor="#0d9488"
+            />
+          }
         >
           {/* Header */}
           <View style={styles.header}>
@@ -441,7 +439,7 @@ export default function ProviderProfileScreen() {
                 
                 <View style={styles.profileInfo}>
                   <Text style={styles.profileName}>
-                    {providerInfo?.business_name || profile?.full_name || 'Loading...'}
+                    {provider?.business_name || profile?.full_name || 'Loading...'}
                   </Text>
                   <Text style={styles.profileEmail}>
                     {profile?.email || 'Loading...'}
@@ -468,15 +466,15 @@ export default function ProviderProfileScreen() {
                 <View style={styles.businessInfoItem}>
                   <Ionicons name="construct-outline" size={16} color="rgba(255,255,255,0.9)" />
                   <Text style={styles.businessInfoText}>
-                    {providerInfo?.business_type || 'Service Type'}
+                    {provider?.business_type || 'Service Type'}
                   </Text>
                 </View>
                 
-                {providerInfo?.years_of_experience && (
+                {provider?.years_of_experience && (
                   <View style={styles.businessInfoItem}>
                     <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.9)" />
                     <Text style={styles.businessInfoText}>
-                      {providerInfo.years_of_experience} years experience
+                      {provider.years_of_experience} years experience
                     </Text>
                   </View>
                 )}
@@ -484,12 +482,12 @@ export default function ProviderProfileScreen() {
               
               <View style={styles.profileStats}>
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{providerInfo?.rating?.toFixed(1) || '--'}</Text>
+                  <Text style={styles.statValue}>{provider?.rating?.toFixed(1) || '--'}</Text>
                   <Text style={styles.statLabel}>Rating</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{providerInfo?.total_jobs || '0'}</Text>
+                  <Text style={styles.statValue}>{provider?.completed_jobs || '0'}</Text>
                   <Text style={styles.statLabel}>Jobs</Text>
                 </View>
                 <View style={styles.statDivider} />
@@ -533,7 +531,7 @@ export default function ProviderProfileScreen() {
             disabled={loading}
           >
             {loading ? (
-              <Ionicons name="refresh-outline" size={20} color="#ef4444" />
+              <ActivityIndicator size="small" color="#ef4444" />
             ) : (
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />
             )}
@@ -556,6 +554,16 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   scrollView: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0fdfa',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#64748b',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -593,9 +601,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  profileGradient: {
-    padding: 24,
-  },
+  profileGradient: { padding: 24 },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -620,9 +626,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  profileInfo: {
-    flex: 1,
-  },
+  profileInfo: { flex: 1 },
   profileName: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -643,10 +647,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
-  verificationText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  verificationText: { fontSize: 12, fontWeight: '600' },
   businessInfo: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -675,28 +676,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 16,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
+  statItem: { flex: 1, alignItems: 'center' },
   statValue: {
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
+  statLabel: { fontSize: 12, color: 'rgba(255, 255, 255, 0.8)' },
   statDivider: {
     width: 1,
     height: 30,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
-  section: {
-    marginBottom: 24,
-  },
+  section: { marginBottom: 24 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -737,19 +730,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  menuItemText: {
-    flex: 1,
-  },
+  menuItemText: { flex: 1 },
   menuItemTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1e293b',
     marginBottom: 2,
   },
-  menuItemSubtitle: {
-    fontSize: 13,
-    color: '#64748b',
-  },
+  menuItemSubtitle: { fontSize: 13, color: '#64748b' },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -765,9 +753,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  logoutButtonDisabled: {
-    opacity: 0.7,
-  },
+  logoutButtonDisabled: { opacity: 0.7 },
   logoutText: {
     fontSize: 16,
     fontWeight: '600',
@@ -779,7 +765,5 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 16,
   },
-  bottomSpacing: {
-    height: 20,
-  },
+  bottomSpacing: { height: 20 },
 });

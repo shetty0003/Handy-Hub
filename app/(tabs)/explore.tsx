@@ -309,6 +309,12 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontWeight: '500',
   },
+  noResultsText: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 50,
+  },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',

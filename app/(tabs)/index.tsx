@@ -2,19 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { supabase } from '../../utils/supabase';
-import { getUserProfile } from '../../utils/profileHelper';
-import {
-  ActivityIndicator,
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getUserProfile } from '../../utils/profileHelper';
+import { supabase } from '../../utils/supabase';
+
 
 const { width } = Dimensions.get('window');
 
@@ -24,35 +16,219 @@ interface ServiceCategory {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
 }
-const serviceCategories: ServiceCategory[] = [
-  { id: '1', name: 'Plumbing', icon: 'water', color: '#3b82f6' },
-  { id: '2', name: 'Electrical', icon: 'flash', color: '#f59e0b' },
-  { id: '3', name: 'Carpentry', icon: 'hammer', color: '#8b5cf6' },
-  { id: '4', name: 'Cleaning', icon: 'sparkles', color: '#ec4899' },
-  { id: '5', name: 'Painting', icon: 'brush', color: '#10b981' },
-  { id: '6', name: 'Gardening', icon: 'leaf', color: '#059669' },
-  { id: '7', name: 'Moving', icon: 'car', color: '#6366f1' },
-  { id: '8', name: 'More', icon: 'grid', color: '#64748b' },
-];
+
+interface Provider {
+  id: string;
+  business_name: string;
+  business_type: string;
+  rating: number;
+  total_jobs: number;
+  profiles: {
+    full_name: string;
+  } | null;
+}
+
+interface Booking {
+  id: string;
+  service_name: string;
+  booking_time: string;
+  status: string;
+  service_categories: {
+    icon: keyof typeof Ionicons.glyphMap;
+    color: string;
+  };
+}
 
 export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
+  const [featuredProviders, setFeaturedProviders] = useState<Provider[]>([]);
+  const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchData = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const profile = await getUserProfile(user.id);
-        setUser(profile);
+      try {
+        // Get current user
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          const profile = await getUserProfile(currentUser.id);
+          setUser(profile);
+        }
+
+        // Fetch service categories
+        const { data: categories, error: categoriesError } = await supabase
+          .from('service_categories')
+          .select('*')
+          .order('name');
+
+        if (categoriesError) {
+          console.error('Error fetching service categories:', categoriesError);
+        } else {
+          setServiceCategories(categories as ServiceCategory[]);
+        }
+
+        // Fetch featured providers
+        const { data: providers, error: providersError } = await supabase
+          .from('providers')
+          .select(`
+            id,
+            business_name,
+            business_type,
+            rating,
+            total_jobs,
+            profiles (
+              full_name
+            )
+          `)
+          .order('rating', { ascending: false })
+          .limit(5);
+
+        if (providersError) {
+          console.error('Error fetching featured providers:', providersError);
+        } else {
+          setFeaturedProviders(providers as any);
+        }
+
+        // Fetch recent bookings - FIXED QUERY
+        try {
+          const { data: bookings, error: bookingsError } = await supabase
+            .from('bookings')
+            .select(`
+              id,
+              service_name,
+              booking_time,
+              status,
+              services (
+                service_categories (
+                  icon,
+                  color
+                )
+              )
+            `)
+            .eq('user_id', currentUser?.id)
+            .order('booking_time', { ascending: false })
+            .limit(5);
+
+          if (bookingsError) {
+            console.error('Error with Option 1:', bookingsError);
+            
+            // OPTION 2: If bookings has category_id directly
+            const { data: bookings2, error: bookingsError2 } = await supabase
+              .from('bookings')
+              .select(`
+                id,
+                service_name,
+                booking_time,
+                status,
+                category_id
+              `)
+              .eq('user_id', currentUser?.id)
+              .order('booking_time', { ascending: false })
+              .limit(5);
+
+            if (bookingsError2) {
+              console.error('Error with Option 2:', bookingsError2);
+              
+              // OPTION 3: Just get basic booking data without categories
+              const { data: bookings3, error: bookingsError3 } = await supabase
+                .from('bookings')
+                .select('*')
+                .eq('user_id', currentUser?.id)
+                .order('booking_time', { ascending: false })
+                .limit(5);
+
+              if (bookingsError3) {
+                console.error('Error with Option 3:', bookingsError3);
+                setRecentBookings([]);
+              } else if (bookings3) {
+                // Map bookings with default category icon
+                const mappedBookings = bookings3.map(booking => ({
+                  id: booking.id,
+                  service_name: booking.service_name || 'Service',
+                  booking_time: booking.booking_time,
+                  status: booking.status || 'Pending',
+                  service_categories: {
+                    icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
+                    color: '#0d9488'
+                  }
+                }));
+                setRecentBookings(mappedBookings);
+              }
+            } else if (bookings2) {
+              // If we have category_id, fetch categories separately
+              const categoryIds = bookings2.map(b => b.category_id).filter(Boolean);
+              const categoriesMap: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {};
+              
+              if (categoryIds.length > 0) {
+                const { data: categoriesData } = await supabase
+                  .from('service_categories')
+                  .select('*')
+                  .in('id', categoryIds);
+                
+                if (categoriesData) {
+                  categoriesData.forEach((category: any) => {
+                    categoriesMap[category.id] = {
+                      icon: category.icon as keyof typeof Ionicons.glyphMap,
+                      color: category.color
+                    };
+                  });
+                }
+              }
+              
+              const mappedBookings = bookings2.map(booking => ({
+                id: booking.id,
+                service_name: booking.service_name || 'Service',
+                booking_time: booking.booking_time,
+                status: booking.status || 'Pending',
+                service_categories: categoriesMap[booking.category_id] || {
+                  icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
+                  color: '#0d9488'
+                }
+              }));
+              
+              setRecentBookings(mappedBookings);
+            }
+          } else if (bookings) {
+            // Transform data from Option 1
+            const transformedBookings = bookings.map(booking => {
+              // booking.services might be an array, so get the first service's category
+              const serviceCategory = Array.isArray(booking.services) && 
+                booking.services.length > 0 && 
+                Array.isArray(booking.services[0]?.service_categories) && 
+                booking.services[0].service_categories.length > 0
+                ? booking.services[0].service_categories[0]
+                : booking.services?.[0]?.service_categories?.[0] || {
+                    icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
+                    color: '#0d9488'
+                  };
+
+              return {
+                id: booking.id,
+                service_name: booking.service_name || 'Service',
+                booking_time: booking.booking_time,
+                status: booking.status || 'Pending',
+                service_categories: serviceCategory
+              };
+            });
+            
+            setRecentBookings(transformedBookings);
+          }
+        } catch (error) {
+          console.error('Error in bookings fetch:', error);
+          setRecentBookings([]);
+        }
+      } catch (error) {
+        console.error('Error in fetchData:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
-    fetchUser();
+    fetchData();
   }, []);
 
   const handleServicePress = (serviceName: string) => {
@@ -68,16 +244,31 @@ export default function HomePage() {
     console.log('Notifications pressed');
   };
 
+  const handleAIButtonPress = () => {
+    console.log('AI Prompt:', aiPrompt);
+    // TODO: Implement AI suggestion logic
+    alert('AI feature coming soon!');
+    setAiPrompt('');
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
+
   return (
-    <LinearGradient
-      colors={['#f0fdfa', '#ecfdf5']}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ScrollView 
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-        >
+    <LinearGradient colors={['#f0fdfa', '#ccfbf1', '#ffffff']} style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView style={styles.scrollView}>
           {/* Header */}
           <View style={styles.header}>
             <View>
@@ -85,25 +276,19 @@ export default function HomePage() {
               <Text style={styles.subtitle}>What service do you need today?</Text>
             </View>
             <View style={styles.headerIcons}>
-              <TouchableOpacity 
-                style={styles.iconButton}
-                onPress={handleNotificationPress}
-              >
+              <TouchableOpacity style={styles.iconButton} onPress={handleNotificationPress}>
                 <Ionicons name="notifications-outline" size={24} color="#0d9488" />
                 <View style={styles.badge} />
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.iconButton}
-                onPress={handleProfilePress}
-              >
-                <Ionicons name="person-circle-outline" size={28} color="#0d9488" />
+              <TouchableOpacity style={styles.iconButton} onPress={handleProfilePress}>
+                <Ionicons name="person-outline" size={24} color="#0d9488" />
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Search Bar */}
           <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color="#64748b" style={styles.searchIcon} />
+            <Ionicons name="search-outline" size={20} color="#64748b" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search for services..."
@@ -118,128 +303,173 @@ export default function HomePage() {
 
           {/* AI Prompt Input */}
           <View style={styles.aiPromptContainer}>
-            <Ionicons name="chatbubble-ellipses-outline" size={20} color="#64748b" style={styles.aiIcon} />
+            <Ionicons name="sparkles" size={20} color="#FFD700" style={styles.aiIcon} />
             <TextInput
               style={styles.aiPromptInput}
-              placeholder="Describe your problem for AI suggestions..."
+              placeholder="Ask AI for service suggestions..."
               placeholderTextColor="#94a3b8"
               value={aiPrompt}
               onChangeText={setAiPrompt}
               multiline
-              numberOfLines={3}
             />
-            <TouchableOpacity style={styles.aiSubmitButton}>
+            <TouchableOpacity style={styles.aiSubmitButton} onPress={handleAIButtonPress}>
               <Ionicons name="send" size={20} color="#0d9488" />
             </TouchableOpacity>
           </View>
 
           {/* Service Categories */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Popular Services</Text>
-            <View style={styles.categoriesGrid}>
-              {serviceCategories.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={styles.categoryCard}
-                  onPress={() => handleServicePress(category.name)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
-                    <Ionicons name={category.icon} size={28} color="white" />
-                  </View>
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Popular Services</Text>
             </View>
+            {loading ? (
+              <ActivityIndicator size="large" color="#0d9488" />
+            ) : serviceCategories.length === 0 ? (
+              <View style={styles.noDataCard}>
+                <Text style={styles.noDataText}>No services available</Text>
+              </View>
+            ) : (
+              <View style={styles.categoriesGrid}>
+                {serviceCategories.map((category: ServiceCategory) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={styles.categoryCard}
+                    onPress={() => handleServicePress(category.name)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
+                      <Ionicons name={category.icon} size={28} color="white" />
+                    </View>
+                    <Text style={styles.categoryName}>{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Featured Services */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Featured Providers</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/providers' as any)}>
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
-
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.featuredScroll}
-            >
-              <View style={styles.featuredCard}>
-                <View style={styles.featuredImage}>
-                  <Ionicons name="person" size={40} color="#0d9488" />
-                </View>
-                <View style={styles.featuredInfo}>
-                  <Text style={styles.featuredName}>John Doe</Text>
-                  <Text style={styles.featuredService}>Plumber</Text>
-                  <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={14} color="#f59e0b" />
-                    <Text style={styles.ratingText}>4.8 (120)</Text>
-                  </View>
-                </View>
+            {loading ? (
+              <ActivityIndicator size="large" color="#0d9488" />
+            ) : featuredProviders.length === 0 ? (
+              <View style={styles.noDataCard}>
+                <Text style={styles.noDataText}>No providers available</Text>
               </View>
-
-              <View style={styles.featuredCard}>
-                <View style={styles.featuredImage}>
-                  <Ionicons name="person" size={40} color="#0d9488" />
-                </View>
-                <View style={styles.featuredInfo}>
-                  <Text style={styles.featuredName}>Jane Smith</Text>
-                  <Text style={styles.featuredService}>Electrician</Text>
-                  <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={14} color="#f59e0b" />
-                    <Text style={styles.ratingText}>4.9 (95)</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.featuredCard}>
-                <View style={styles.featuredImage}>
-                  <Ionicons name="person" size={40} color="#0d9488" />
-                </View>
-                <View style={styles.featuredInfo}>
-                  <Text style={styles.featuredName}>Mike Johnson</Text>
-                  <Text style={styles.featuredService}>Carpenter</Text>
-                  <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={14} color="#f59e0b" />
-                    <Text style={styles.ratingText}>4.7 (88)</Text>
-                  </View>
-                </View>
-              </View>
-            </ScrollView>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+                {featuredProviders.map((provider: Provider) => (
+                  <TouchableOpacity
+                    key={provider.id}
+                    style={styles.featuredCard}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/provider/[id]',
+                        params: { id: provider.id }
+                      })
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.featuredImage}>
+                      <Ionicons name="person" size={40} color="#0d9488" />
+                    </View>
+                    <View style={styles.featuredInfo}>
+                      <Text style={styles.featuredName} numberOfLines={1}>
+                        {provider.business_name || provider.profiles?.full_name || 'Provider'}
+                      </Text>
+                      <Text style={styles.featuredService} numberOfLines={1}>
+                        {provider.business_type || 'Service Provider'}
+                      </Text>
+                      <View style={styles.ratingContainer}>
+                        <Ionicons name="star" size={16} color="#fbbf24" />
+                        <Text style={styles.ratingText}>
+                          {provider.rating?.toFixed(1) || '0.0'} ({provider.total_jobs || 0})
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
 
           {/* Recent Bookings */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Bookings</Text>
-            
-            <View style={styles.bookingCard}>
-              <View style={styles.bookingIcon}>
-                <Ionicons name="water" size={24} color="#3b82f6" />
-              </View>
-              <View style={styles.bookingInfo}>
-                <Text style={styles.bookingTitle}>Plumbing Service</Text>
-                <Text style={styles.bookingDate}>Today, 2:00 PM</Text>
-              </View>
-              <View style={styles.bookingStatus}>
-                <Text style={styles.statusText}>Pending</Text>
-              </View>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent Bookings</Text>
+              <TouchableOpacity onPress={() => router.push('/bookings' as any)}>
+                <Text style={styles.seeAllText}>See All</Text>
+              </TouchableOpacity>
             </View>
-
-            <View style={styles.bookingCard}>
-              <View style={styles.bookingIcon}>
-                <Ionicons name="flash" size={24} color="#f59e0b" />
+            {loading ? (
+              <ActivityIndicator size="large" color="#0d9488" />
+            ) : recentBookings.length === 0 ? (
+              <View style={styles.noBookingCard}>
+                <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
+                <Text style={styles.noDataText}>No recent bookings</Text>
+                <TouchableOpacity
+                  style={styles.bookNowButton}
+                  onPress={() => router.push('/needservice')}
+                >
+                  <Text style={styles.bookNowText}>Book a Service</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.bookingInfo}>
-                <Text style={styles.bookingTitle}>Electrical Repair</Text>
-                <Text style={styles.bookingDate}>Yesterday, 10:00 AM</Text>
-              </View>
-              <View style={[styles.bookingStatus, styles.completedStatus]}>
-                <Text style={[styles.statusText, styles.completedText]}>Completed</Text>
-              </View>
-            </View>
+            ) : (
+              recentBookings.map((booking: Booking) => (
+                <TouchableOpacity
+                  key={booking.id}
+                  style={styles.bookingCard}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/booking/[id]',
+                      params: { id: booking.id }
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.bookingIcon,
+                      { backgroundColor: booking.service_categories.color }
+                    ]}
+                  >
+                    <Ionicons
+                      name={booking.service_categories.icon}
+                      size={24}
+                      color="white"
+                    />
+                  </View>
+                  <View style={styles.bookingInfo}>
+                    <Text style={styles.bookingTitle}>{booking.service_name}</Text>
+                    <Text style={styles.bookingDate}>{formatDate(booking.booking_time)}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.bookingStatus,
+                      booking.status === 'completed' && styles.completedStatus,
+                      booking.status === 'cancelled' && styles.cancelledStatus,
+                      booking.status === 'in_progress' && styles.inProgressStatus
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        booking.status === 'completed' && styles.completedText,
+                        booking.status === 'cancelled' && styles.cancelledText,
+                        booking.status === 'in_progress' && styles.inProgressText
+                      ]}
+                    >
+                      {booking.status?.replace('_', ' ').toUpperCase() || 'PENDING'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
 
           {/* Bottom Spacing */}
@@ -249,13 +479,10 @@ export default function HomePage() {
         {/* Floating Action Button */}
         <TouchableOpacity
           style={styles.fab}
-          activeOpacity={0.8}
           onPress={() => router.push('/needservice')}
+          activeOpacity={0.8}
         >
-          <LinearGradient
-            colors={['#14b8a6', '#0d9488']}
-            style={styles.fabGradient}
-          >
+          <LinearGradient colors={['#0d9488', '#14b8a6']} style={styles.fabGradient}>
             <Ionicons name="add" size={28} color="white" />
           </LinearGradient>
         </TouchableOpacity>
@@ -327,12 +554,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 2,
     borderColor: '#FFD700',
-    borderRadius: 30,    shadowColor: '#000',
+    borderRadius: 30,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   searchIcon: {
     marginRight: 10,
@@ -371,8 +599,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#1e293b',
-    minHeight: 30,
+    minHeight: 60,
     textAlignVertical: 'top',
+    paddingVertical: 8,
   },
   aiSubmitButton: {
     padding: 8,
@@ -393,8 +622,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#0d9488',
-    paddingHorizontal: 20,
-    marginBottom: 16,
   },
   seeAllText: {
     fontSize: 14,
@@ -405,11 +632,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 12,
+    justifyContent: 'space-between',
   },
   categoryCard: {
     width: (width - 64) / 4,
     alignItems: 'center',
-    marginHorizontal: 8,
     marginBottom: 20,
   },
   categoryIcon: {
@@ -447,7 +674,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   featuredImage: {
-    width: 128,
+    width: '100%',
     height: 100,
     backgroundColor: '#f0fdfa',
     borderRadius: 12,
@@ -456,7 +683,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   featuredInfo: {
-    alignItems: 'flex-start',
+    width: '100%',
   },
   featuredName: {
     fontSize: 16,
@@ -497,7 +724,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#f0fdfa',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -531,6 +757,60 @@ const styles = StyleSheet.create({
   },
   completedText: {
     color: '#065f46',
+  },
+  cancelledStatus: {
+    backgroundColor: '#fee2e2',
+  },
+  cancelledText: {
+    color: '#991b1b',
+  },
+  inProgressStatus: {
+    backgroundColor: '#dbeafe',
+  },
+  inProgressText: {
+    color: '#1e40af',
+  },
+  noDataCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  noBookingCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 32,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  bookNowButton: {
+    backgroundColor: '#0d9488',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 16,
+  },
+  bookNowText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   bottomSpacing: {
     height: 100,

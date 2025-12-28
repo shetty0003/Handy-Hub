@@ -3,8 +3,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { getUserProfile } from '../../utils/profileHelper';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -13,10 +13,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  ActivityIndicator
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getUserProfile } from '../../utils/profileHelper';
 import { supabase } from '../../utils/supabase';
 
 const CustomLogo = () => (
@@ -39,89 +39,89 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert('Error', 'Please fill in all fields');
-    return;
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email.trim())) {
-    Alert.alert('Invalid Email', 'Please enter a valid email address');
-    return;
-  }
-
-  setLoading(true);
-  try {
-    // 1. Sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: password,
-    });
-
-    if (authError) {
-      if (authError.message.includes('Invalid login credentials')) {
-        Alert.alert(
-          'Login Failed',
-          'Invalid email or password. Please check your credentials and try again.'
-        );
-      } else if (authError.message.includes('Email not confirmed')) {
-        Alert.alert(
-          'Email Not Verified',
-          'Please verify your email address before logging in. Check your inbox for the verification link.'
-        );
-      } else if (authError.message.includes('rate limit')) {
-        Alert.alert(
-          'Too Many Attempts',
-          'Please wait a few minutes before trying again.'
-        );
-      } else {
-        Alert.alert('Login Failed', authError.message);
-      }
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    if (!authData.user) {
-      Alert.alert('Error', 'User not found');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
       return;
     }
 
-    const profile = await getUserProfile(authData.user.id);
+    setLoading(true);
+    try {
+      // 1. Sign in with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
 
-    // 4. Route based on user type
-    if (profile?.user_type === 'provider') {
-      // Check verification status for providers
-      if (profile.verification_status !== 'verified') {
+      if (authError) {
+        if (authError.message.includes('Invalid login credentials')) {
+          Alert.alert(
+            'Login Failed',
+            'Invalid email or password. Please check your credentials and try again.'
+          );
+        } else if (authError.message.includes('Email not confirmed')) {
+          Alert.alert(
+            'Email Not Verified',
+            'Please verify your email address before logging in. Check your inbox for the verification link.'
+          );
+        } else if (authError.message.includes('rate limit')) {
+          Alert.alert(
+            'Too Many Attempts',
+            'Please wait a few minutes before trying again.'
+          );
+        } else {
+          Alert.alert('Login Failed', authError.message);
+        }
+        return;
+      }
+
+      if (!authData.user) {
+        Alert.alert('Error', 'User not found');
+        return;
+      }
+
+      // 2. Get user profile
+      const { profile } = await getUserProfile(authData.user.id);
+      
+      // 3. Route based on user type
+      if (profile?.user_type === 'provider') {
+        // Check verification status for providers
+        if (profile.verification_status !== 'verified') {
+          Alert.alert(
+            'Account Under Review',
+            'Your provider account is still under review. You\'ll be notified once verified.',
+            [{ text: 'OK', onPress: () => router.replace('/(provider-tabs)') }]
+          );
+        } else {
+          router.replace('/(provider-tabs)');
+        }
+      } else {
+        // Customer or default
+        router.replace('/(tabs)');
+      }
+
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      // Network error detection
+      if (error.message?.includes('Network request failed') || 
+          error.message?.includes('fetch')) {
         Alert.alert(
-          'Account Under Review',
-          'Your provider account is still under review. You\'ll be notified once verified.',
-          [{ text: 'OK', onPress: () => router.replace('/(provider-tabs)') }]
+          'Network Error',
+          'Unable to connect to the server. Please check your internet connection.'
         );
       } else {
-        router.replace('/(provider-tabs)');
+        Alert.alert('Error', 'An unexpected error occurred. Please try again.');
       }
-    } else {
-      // Customer or default
-      router.replace('/(tabs)');
+    } finally {
+      setLoading(false);
     }
-
-  } catch (error: any) {
-    console.error('Login error:', error);
-    
-    // Network error detection
-    if (error.message?.includes('Network request failed') || 
-        error.message?.includes('fetch')) {
-      Alert.alert(
-        'Network Error',
-        'Unable to connect to the server. Please check your internet connection.'
-      );
-    } else {
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-    }
-  } finally {
-    setLoading(false);
-  }
-
-};
+  };
 
   return (
     <LinearGradient
@@ -160,6 +160,8 @@ export default function LoginPage() {
                   autoCorrect={false}
                   keyboardType="email-address"
                   editable={!loading}
+                  returnKeyType="next"
+                  onSubmitEditing={() => {/* Optionally focus password field */}}
                 />
               </View>
 
@@ -175,6 +177,8 @@ export default function LoginPage() {
                   autoCapitalize="none"
                   secureTextEntry={!showPassword}
                   editable={!loading}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -197,32 +201,32 @@ export default function LoginPage() {
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
 
-              <LinearGradient
-                colors={['#0d9488', '#0f766e']}
-                style={styles.submitButton}
-                start={{ x: 0, y: 1 }}
-                end={{ x: 0, y: 0 }}
+              <TouchableOpacity
+                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
               >
-                <TouchableOpacity
-                  style={styles.submitButtonInner}
-                  onPress={handleLogin}
-                  disabled={loading}
+                <LinearGradient
+                  colors={['#0d9488', '#0f766e']}
+                  style={styles.submitButtonGradient}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 0, y: 0 }}
                 >
                   {loading ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color="white" size="small" />
                   ) : (
                     <Text style={styles.submitButtonText}>Login</Text>
                   )}
-                </TouchableOpacity>
-              </LinearGradient>
+                </LinearGradient>
+              </TouchableOpacity>
 
               <TouchableOpacity 
-                onPress={() => router.push('/auth/signin')} 
+                onPress={() => router.push('/serviceselectionscreen')} 
                 style={styles.switchButton}
                 disabled={loading}
               >
                 <Text style={styles.switchButtonText}>
-                  Dont have an account? Create one
+                  Don't have an account? Create one
                 </Text>
               </TouchableOpacity>
             </View>
@@ -348,8 +352,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 2,
     borderColor: '#FFD700',
+    overflow: 'hidden',
   },
-  submitButtonInner: {
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  submitButtonGradient: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
