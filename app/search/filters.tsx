@@ -18,7 +18,7 @@ interface FiltersState {
   availableNow: boolean;
 }
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: { value: FiltersState['sortBy']; label: string }[] = [
   { value: 'rating', label: 'Highest Rated' },
   { value: 'price', label: 'Price: Low to High' },
   { value: 'distance', label: 'Nearest' },
@@ -26,6 +26,13 @@ const SORT_OPTIONS = [
 ];
 
 const RADIUS_OPTIONS = [5, 10, 25, 50, 100];
+
+// Filters persisted across screens via the global scope (kept intentionally
+// simple; previously this triggered an implicit-any error).
+declare global {
+  // eslint-disable-next-line no-var
+  var searchFilters: FiltersState | undefined;
+}
 
 export default function SearchFiltersScreen() {
   const [filters, setFilters] = useState<FiltersState>({

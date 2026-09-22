@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -21,7 +21,7 @@ import {
   deleteService,
   getProviderServices,
   updateService,
-} from "../../utils/serviceHelpers";
+} from "../utils/serviceHelpers";
 
 const serviceCategorySchema = z.object({
   name: z.string().min(1, "Service name is required").max(200),
@@ -67,7 +67,7 @@ export default function ProviderServicesScreen() {
         Alert.alert("Error", error);
       } else {
         setServices(
-          fetchedServices.map((s) => ({
+          fetchedServices.map((s: any) => ({
             id: s.id,
             name: s.name,
             description: s.description || "",

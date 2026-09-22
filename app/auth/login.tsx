@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getUserProfile } from '../../utils/profileHelper';
 import { supabase } from '../../utils/supabase';
-import { loginWithValidation } from '../../utils/authHelpers';
+import { loginWithValidation } from '../utils/authHelpers';
 import { handleError } from '../../utils/errorHandler';
 
 const CustomLogo = () => (
@@ -184,7 +184,7 @@ export default function LoginPage() {
                 disabled={loading}
               >
                 <Text style={styles.switchButtonText}>
-                  Don't have an account? Create one
+                  Don&apos;t have an account? Create one
                 </Text>
               </TouchableOpacity>
             </View>

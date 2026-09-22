@@ -59,3 +59,41 @@ export class AuthErrorHandler {
 }
 
 // Usage in your components:
+export interface HandledError {
+  userMessage: string;
+  logMessage: string;
+  code?: string;
+}
+
+/**
+ * Shared error handler used by the screens and the helper modules.
+ * Returns a message that is safe to show to the user plus a message
+ * intended for logs.
+ */
+export function handleError(error: unknown, context: string = 'unknown'): HandledError {
+  const err = error as { message?: string; code?: string; stack?: string } | null | undefined;
+  const errorMessage = err?.message || String(error) || 'An unknown error occurred';
+
+  let userMessage = AuthErrorHandler.handleAuthError({ message: errorMessage });
+
+  // Provider/database specific cases handled before the auth fallback
+  if (errorMessage.includes('already exists')) {
+    userMessage = 'Provider profile already exists for this user.';
+  } else if (errorMessage.includes('not authenticated') || errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
+    userMessage = 'Session expired. Please log in again.';
+  } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden') || errorMessage.includes('policy')) {
+    userMessage = "You don't have permission to perform this action.";
+  } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+    userMessage = 'The requested resource was not found.';
+  } else if (errorMessage.includes('check constraint') || errorMessage.includes('422')) {
+    userMessage = 'Please check your information and try again.';
+  } else if (errorMessage.includes('429')) {
+    userMessage = 'Too many requests. Please wait a moment and try again.';
+  } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+    userMessage = 'The request took too long. Please check your connection and try again.';
+  }
+
+  const logMessage = `[${context}] ${err?.stack || errorMessage}`;
+
+  return { userMessage, logMessage, code: err?.code };
+}

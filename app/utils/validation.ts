@@ -32,10 +32,14 @@ export const signupSchema = z.object({
     .min(2, 'Name must be at least 2 characters')
     .max(100),
   userType: z.enum(['customer', 'provider']),
-  phone: z.string()
+  phone: z
+    .union([
+      z.string().trim().min(10, 'Phone number must be at least 10 digits'),
+      z.literal('').transform(() => null),
+      z.null(),
+      z.undefined(),
+    ])
     .optional()
-    .transform(val => val?.trim() || null)
-    .pipe(z.string().min(10, 'Phone number must be at least 10 digits').nullable().optional())
 });
 
 export const forgotPasswordSchema = z.object({

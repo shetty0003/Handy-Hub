@@ -310,7 +310,7 @@ export default function ProviderVerificationScreen() {
               <Text style={styles.infoText}>
                 • Upload all required documents{'\n'}
                 • Our team will review within 3-5 business days{'\n'}
-                • You'll receive email notifications{'\n'}
+                • You&apos;ll receive email notifications{'\n'}
                 • Verified providers get priority in search results
               </Text>
             </View>

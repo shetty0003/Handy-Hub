@@ -253,15 +253,18 @@ export default function HomePage() {
     // Real-time AI recommendations
     try {
       const { getAIChatResponse } = require('../ai/assistant');
-      const aiResponse = getAIChatResponse(aiPrompt.trim());
+      const aiResponse = getAIChatResponse(aiPrompt.trim()) as {
+        answer: string;
+        suggestions: { service: string }[];
+      };
 
       // Show recommendations in alert with action buttons
       Alert.alert(
         'AI Recommendations',
-        `${aiResponse.answer}\n\nTop suggestions: ${aiResponse.suggestions.map(s => s.service).join(', ')}`,
+        `${aiResponse.answer}\n\nTop suggestions: ${aiResponse.suggestions.map((s: { service: string }) => s.service).join(', ')}`,
         [
           { text: 'Close', style: 'cancel' },
-          ...aiResponse.suggestions.map(s => ({
+          ...aiResponse.suggestions.map((s: { service: string }) => ({
             text: `Book ${s.service}`,
             onPress: () => router.push('/needservice'),
           })),

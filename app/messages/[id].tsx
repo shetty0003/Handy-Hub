@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { getMessages, sendMessage } from '../../utils/messageHelpers';
+import { getMessages, sendMessage } from '../utils/messageHelpers';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -28,7 +28,7 @@ interface Message {
 }
 
 export default function ChatScreen() {
-  const { id: receiverId } = useLocalSearchParams();
+  const { id: receiverId } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');

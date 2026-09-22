@@ -48,17 +48,17 @@ export default function EditProviderProfileScreen() {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const userProfile = await getUserProfile(user.id);
+        const { profile: userProfile, provider } = await getUserProfile(user.id);
         if (userProfile) {
           setProfile({
-            business_name: userProfile.providers?.business_name || '',
-            business_type: userProfile.providers?.business_type || '',
-            business_address: userProfile.providers?.business_address || '',
-            years_of_experience: userProfile.providers?.years_of_experience?.toString() || '',
-            license_number: userProfile.providers?.license_number || '',
-            tax_id: userProfile.providers?.tax_id || '',
+            business_name: provider?.business_name || '',
+            business_type: provider?.business_type || '',
+            business_address: provider?.business_address || '',
+            years_of_experience: provider?.years_of_experience?.toString() || '',
+            license_number: provider?.license_number || '',
+            tax_id: provider?.tax_id || '',
             phone: userProfile.phone || '',
-            description: userProfile.providers?.description || '',
+            description: provider?.description || '',
           });
         }
       }

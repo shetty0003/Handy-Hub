@@ -40,6 +40,7 @@ export interface ProviderInfo {
   is_verified?: boolean;
   latitude?: number;
   longitude?: number;
+  description?: string;
 }
 
 export interface ServiceRequest {
@@ -469,3 +470,97 @@ export const getRequestMatches = async (requestId: string) => {
     return { data: null, error };
   }
 };
+export async function getJobRequestsWithService(providerId: string, tab: string) {
+  const { data, error } = await supabase.from('bookings').select('*').eq('provider_id', providerId).eq('status', tab === 'Pending' ? 'pending' : tab.toLowerCase());
+  return { data, error };
+}
+
+// ============================================
+// PROVIDER SERVICES (CRUD)
+// ============================================
+
+export interface Service {
+  id: string;
+  provider_id: string;
+  title: string;
+  category: string;
+  description?: string | null;
+  price: number;
+  duration_hours: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ServiceInput = Omit<Service, 'id' | 'created_at' | 'updated_at'> &
+  Partial<Pick<Service, 'id' | 'created_at' | 'updated_at'>>;
+
+// Get all services belonging to a provider
+export const getProviderServices = async (providerId: string): Promise<Service[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('provider_id', providerId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error getting provider services:', error);
+      return [];
+    }
+
+    return (data as Service[]) || [];
+  } catch (error) {
+    console.error('Error in getProviderServices:', error);
+    return [];
+  }
+};
+
+// Create a new service
+export const createService = async (service: ServiceInput) => {
+  try {
+    const { data, error } = await supabase
+      .from('services')
+      .insert(service)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data: data as Service, error: null };
+  } catch (error) {
+    console.error('Error creating service:', error);
+    return { data: null, error };
+  }
+};
+
+// Update an existing service
+export const updateService = async (serviceId: string, updates: Partial<ServiceInput>) => {
+  try {
+    const { data, error } = await supabase
+      .from('services')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', serviceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data: data as Service, error: null };
+  } catch (error) {
+    console.error('Error updating service:', error);
+    return { data: null, error };
+  }
+};
+
+// Delete a service
+export const deleteService = async (serviceId: string) => {
+  try {
+    const { error } = await supabase.from('services').delete().eq('id', serviceId);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Error deleting service:', error);
+    return { error };
+  }
+};
+

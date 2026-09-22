@@ -81,7 +81,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.props.onError?.(error, errorInfo);
 
     // Show alert for critical errors in production
-    if (Platform.OS !== 'development') {
+    if (!__DEV__) {
       Alert.alert(
         'Something went wrong',
         'We\'ve encountered an error. Your progress has been saved.',
@@ -111,12 +111,12 @@ export class ErrorBoundary extends Component<Props, State> {
       // Default fallback
       return (
         <View style={styles.container}>
-          <Ionicons name="warning-circle" size={64} color="#ef4444" style={styles.icon} />
+          <Ionicons name="warning" size={64} color="#ef4444" style={styles.icon} />
           <Text style={styles.title}>Something Went Wrong</Text>
           <Text style={styles.message}>
             {this.state.error?.message || 'An unexpected error occurred'}
           </Text>
-          {this.state.errorInfo && Platform.OS === 'development' && (
+          {this.state.errorInfo && __DEV__ && (
             <Text style={styles.debugInfo}>
               {this.state.errorInfo.componentStack}
             </Text>
@@ -151,9 +151,9 @@ export function ScreenErrorBoundary({ children, screenName }: ScreenErrorBoundar
       }}
       fallback={(error, _, resetError) => (
         <View style={styles.screenErrorContainer}>
-          <Ionicons name="warning-circle" size={48} color="#ef4444" />
+          <Ionicons name="warning" size={48} color="#ef4444" />
           <Text style={styles.screenErrorTitle}>
-            Can't load {screenName}
+            Can&apos;t load {screenName}
           </Text>
           <Text style={styles.screenErrorMessage}>
             {error.message || 'Please try refreshing this screen.'}

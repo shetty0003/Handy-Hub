@@ -21,7 +21,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint || echo "No lint script"
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
 
   build:
@@ -34,10 +35,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
       - run: npm ci
-      - name: Build app
-        run: npx expo build:$BUILD_PLATFORM --non-interactive || echo "Build prepared"
-        env:
-          BUILD_PLATFORM: android
+      - name: Verify app bundles
+        run: npx expo export --platform web --output-dir dist
 
   deploy-staging:
     runs-on: ubuntu-latest

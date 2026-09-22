@@ -166,7 +166,7 @@ export const fetchFeaturedProviders = async (): Promise<Provider[]> => {
 
     if (error) throw error;
 
-    return data as Provider[];
+    return data as unknown as Provider[];
   } catch (error) {
     console.error('Error fetching providers:', error);
     return [];

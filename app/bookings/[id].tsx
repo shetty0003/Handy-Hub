@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { updateBookingStatus } from '../../utils/serviceHelpers';
+import { updateBookingStatus } from '../../app/utils/serviceHelpers';
 import { handleError } from '../../utils/errorHandler';
 
 interface Booking {

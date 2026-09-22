@@ -29,19 +29,20 @@ export interface SearchResult {
   is_available: boolean;
   is_verified: boolean;
   distance?: number;
-  profiles?: { full_name: string; avatar_url: string } | null;
+  profiles?: { full_name: string; avatar_url: string }[] | { full_name: string; avatar_url: string } | null;
   services?: Array<{
     id: string;
     name: string;
     price: number;
-    category: string;
+    category_id: string;
+    service_categories: { name: string } | null;
   }>;
 }
 
 export async function searchProviders(params: SearchParams): Promise<{ data: SearchResult[]; total: number; error?: string }> {
   const validation = searchSchema.safeParse(params);
   if (!validation.success) {
-    return { data: [], total: 0, error: validation.error.errors[0].message };
+    return { data: [], total: 0, error: validation.error.issues[0]?.message || 'Invalid search parameters' };
   }
 
   const { query, category, location, minPrice, maxPrice, radius, lat, lng, sortBy, page, limit } = validation.data;
@@ -97,7 +98,7 @@ export async function searchProviders(params: SearchParams): Promise<{ data: Sea
         queryBuilder = queryBuilder.order('rating', { ascending: false });
         break;
       case 'price':
-        queryBuilder = queryBuilder.order('hourly_rate', { ascending: true, nullsLast: true });
+        queryBuilder = queryBuilder.order('hourly_rate', { ascending: true, nullsFirst: false });
         break;
       case 'availability':
         queryBuilder = queryBuilder.order('is_available', { ascending: false });
@@ -112,7 +113,7 @@ export async function searchProviders(params: SearchParams): Promise<{ data: Sea
       return { data: [], total: 0, error: error.message };
     }
 
-    return { data: (data as SearchResult[]) || [], total: count || 0 };
+    return { data: (data as unknown as SearchResult[]) || [], total: count || 0 };
   } catch (error) {
     return { data: [], total: 0, error: 'Search failed' };
   }
@@ -135,10 +136,10 @@ export async function searchProvidersNearby(
 
     if (error) {
       // Fallback to text-based location search
-      return searchProviders({ location: '', lat, lng, radius: radiusKm, category });
+      return searchProviders({ location: '', lat, lng, radius: radiusKm, category, page: 1, limit: 20 });
     }
 
-    return { data: data || [], error: null };
+    return { data: data || [], error: undefined };
   } catch {
     return { data: [], error: 'Nearby search unavailable' };
   }
@@ -184,7 +185,7 @@ export async function searchServices(params: {
   maxPrice?: number;
   page?: number;
   limit?: number;
-}): Promise<{ data: any[]; total: number }> {
+}): Promise<{ data: any[]; total: number; error?: string }> {
   const { query, categoryId, minPrice, maxPrice, page = 1, limit = 20 } = params;
   const offset = (page - 1) * limit;
 

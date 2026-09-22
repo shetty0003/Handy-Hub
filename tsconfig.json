@@ -3,8 +3,6 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-native",
-    "module": "commonjs",
-    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
