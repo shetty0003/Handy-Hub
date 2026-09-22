@@ -2,7 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -22,79 +22,102 @@ interface Notification {
   actionable?: boolean;
 }
 
-const notificationsData: Notification[] = [
-  {
-    id: '1',
-    type: 'job',
-    title: 'New Job Request',
-    message: 'Sarah Johnson requested a plumbing service for kitchen sink repair.',
-    time: '5 minutes ago',
-    read: false,
-    actionable: true,
-  },
-  {
-    id: '2',
-    type: 'payment',
-    title: 'Payment Received',
-    message: 'You received $120 for electrical wiring job from Mike Brown.',
-    time: '1 hour ago',
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'message',
-    title: 'New Message',
-    message: 'Emily Davis sent you a message about the cabinet installation.',
-    time: '2 hours ago',
-    read: false,
-  },
-  {
-    id: '4',
-    type: 'review',
-    title: 'New Review',
-    message: 'John Smith left you a 5-star review! "Excellent work and very professional."',
-    time: '3 hours ago',
-    read: true,
-  },
-  {
-    id: '5',
-    type: 'job',
-    title: 'Job Reminder',
-    message: 'You have a scheduled job tomorrow at 10:00 AM with Lisa Anderson.',
-    time: '5 hours ago',
-    read: true,
-  },
-  {
-    id: '6',
-    type: 'system',
-    title: 'Profile Updated',
-    message: 'Your profile information has been successfully updated.',
-    time: '1 day ago',
-    read: true,
-  },
-  {
-    id: '7',
-    type: 'payment',
-    title: 'Withdrawal Completed',
-    message: 'Your withdrawal of $500 has been processed to your bank account.',
-    time: '2 days ago',
-    read: true,
-  },
-  {
-    id: '8',
-    type: 'job',
-    title: 'Job Completed',
-    message: 'David Wilson marked the job as completed. Please review.',
-    time: '3 days ago',
-    read: true,
-  },
-];
+// Notifications are derived from real data rather than hardcoded.
+//
+// There is no `notifications` table in the database, so this screen builds a
+// feed from the user's own bookings plus a lightweight local "read" marker
+// kept in AsyncStorage. Nothing here is fabricated: if the user has no
+// bookings and no provider activity, the list is legitimately empty.
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../utils/supabase';
+
+const READ_IDS_KEY = 'handyhub.notifications.readIds';
+
+const STATUS_COPY: Record<string, { title: string; type: Notification['type'] }> = {
+  pending: { title: 'Booking placed', type: 'job' },
+  confirmed: { title: 'Booking confirmed', type: 'job' },
+  in_progress: { title: 'Job in progress', type: 'job' },
+  completed: { title: 'Job completed', type: 'payment' },
+  cancelled: { title: 'Booking cancelled', type: 'system' },
+};
+
+function timeAgo(iso?: string | null): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const secs = Math.floor((Date.now() - then) / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
 const tabs = ['All', 'Unread', 'Jobs', 'Payments', 'Messages'];
 
 export default function NotificationsScreen() {
   const [selectedTab, setSelectedTab] = useState('All');
-  const [notifications, setNotifications] = useState(notificationsData);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          if (mounted) setNotifications([]);
+          return;
+        }
+
+        // Build the feed from the user's own bookings (no notifications table).
+        const { data: bookings, error } = await supabase
+          .from('bookings')
+          .select('id, service_name, booking_time, status, total_amount, updated_at')
+          .eq('customer_id', user.id)
+          .order('booking_time', { ascending: false })
+          .limit(50);
+
+        if (error) {
+          console.error('Error loading notifications:', error);
+          if (mounted) setNotifications([]);
+          return;
+        }
+
+        const rawIds: string[] = JSON.parse(
+          (await AsyncStorage.getItem(READ_IDS_KEY)) ?? '[]'
+        );
+        const readIds = new Set(rawIds);
+
+        const derived: Notification[] = (bookings ?? []).map((b: any) => {
+          const copy = STATUS_COPY[b.status] ?? { title: 'Booking update', type: 'system' };
+          const amount = b.total_amount != null ? ` • $${b.total_amount}` : '';
+          return {
+            id: b.id,
+            type: copy.type,
+            title: copy.title,
+            message: `${b.service_name || 'Service'}${amount}`,
+            time: timeAgo(b.updated_at || b.booking_time),
+            read: readIds.has(b.id),
+          };
+        });
+
+        if (mounted) setNotifications(derived);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import {
   Animated,
@@ -14,6 +14,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const { width, height } = Dimensions.get('window');
 
 export default function ServiceSelectionScreen() {
+  // The category the user tapped on the home screen ("popular services").
+  // Needed so the booking flow keeps the customer's choice instead of
+  // dropping them into a generic sign-in with no context.
+  const { category: categoryParam } = useLocalSearchParams<{ category?: string }>();
+  const selectedCategory = Array.isArray(categoryParam) ? categoryParam[0] : categoryParam;
+
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -60,8 +66,12 @@ export default function ServiceSelectionScreen() {
   }, []);
 
   const handleNeedServices = () => {
-    console.log('User needs services');
-    router.push('auth/signin' as any);
+    // Forward the chosen category into the auth flow so it survives sign-in
+    // and can be used when creating the booking.
+    router.push({
+      pathname: '/auth/signin',
+      params: selectedCategory ? { category: selectedCategory } : {},
+    } as any);
   };
 
   const handleRenderServices = () => {

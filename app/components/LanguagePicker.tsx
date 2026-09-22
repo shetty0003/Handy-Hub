@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView, SafeAreaView } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'react-native';
 import { LANGUAGE_NAMES, type LanguageCode, setLanguage, getLanguage, t } from '../i18n';
 

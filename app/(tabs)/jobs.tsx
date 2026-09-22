@@ -13,6 +13,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { resolveIoniconName } from '../utils/iconHelpers';
 
 const { width } = Dimensions.get('window');
 
@@ -41,49 +42,84 @@ export default function ClientJobsScreen() {
   useEffect(() => {
     const fetchBookings = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setBookingsData([]);
+          return;
+        }
+
+        // Real schema: bookings has customer_id / provider_id / service_name /
+        // booking_time / address / status / total_amount and a FK to `services`
+        // which itself joins `service_categories`. There is no FK from bookings
+        // to `profiles`, and no title/service_type/date/time/location/price.
         const { data, error } = await supabase
           .from('bookings')
           .select(`
             id,
-            title,
-            service_type,
-            date,
-            time,
-            location,
+            service_name,
+            booking_time,
+            address,
             status,
-            price,
-            providers (
-              profiles (
-                full_name
-              ),
-              rating
+            total_amount,
+            provider_id,
+            services (
+              service_categories ( icon, color )
             )
           `)
-          .eq('user_id', user.id);
+          .eq('customer_id', user.id)
+          .order('booking_time', { ascending: false });
 
         if (error) {
           console.error('Error fetching bookings:', error);
-        } else {
-          const formattedBookings = data.map((b: any) => ({
-            id: b.id,
-            title: b.title,
-            service: b.service_type,
-            provider: b.providers.profiles.full_name,
-            providerRating: b.providers.rating,
-            date: new Date(b.date).toLocaleDateString(),
-            time: b.time,
-            location: b.location,
-            status: b.status,
-            price: `$${b.price}`,
-            icon: 'hammer', // Placeholder
-            iconColor: '#8b5cf6', // Placeholder
-          }));
-          setBookingsData(formattedBookings as any) ;
+          setBookingsData([]);
+          return;
         }
+
+        // Resolve provider names in a second query (no FK to join through).
+        const providerIds = [...new Set((data ?? []).map((b) => b.provider_id).filter(Boolean))] as string[];
+        const providersById: Record<string, string> = {};
+        if (providerIds.length > 0) {
+          const { data: providerRows } = await supabase
+            .from('providers')
+            .select('id, business_name')
+            .in('id', providerIds);
+          for (const p of providerRows ?? []) providersById[p.id] = p.business_name;
+        }
+
+        const formattedBookings = (data ?? []).map((b: any) => {
+          const svc = Array.isArray(b.services) ? b.services[0] : b.services;
+          const category = Array.isArray(svc?.service_categories)
+            ? svc?.service_categories[0]
+            : svc?.service_categories;
+
+          return {
+            id: b.id,
+            title: b.service_name || 'Service',
+            service: b.service_name || 'Service',
+            provider: providersById[b.provider_id] || 'Provider',
+            providerRating: 0,
+            date: b.booking_time
+              ? new Date(b.booking_time).toLocaleDateString()
+              : '—',
+            time: b.booking_time
+              ? new Date(b.booking_time).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '—',
+            location: b.address || 'Address not provided',
+            status: b.status || 'pending',
+            price: b.total_amount != null ? `$${b.total_amount}` : '—',
+            icon: resolveIoniconName(category?.icon),
+            iconColor: category?.color || '#8b5cf6',
+          };
+        });
+
+        setBookingsData(formattedBookings as any);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchBookings();

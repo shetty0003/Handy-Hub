@@ -105,12 +105,16 @@ export async function loginWithValidation(
       return;
     }
 
-    // Enforce email verification for production
-    // const { needsVerification } = await checkEmailVerification();
-    // if (needsVerification) {
-    //   onError('Please verify your email before logging in');
-    //   return;
-    // }
+    // Enforce email verification.
+    // Supabase sets `email_confirmed_at` once the user clicks the link in the
+    // verification email. Without this check an unverified account can sign in.
+    if (!authData.user.email_confirmed_at) {
+      await supabase.auth.signOut();
+      onError(
+        'Please verify your email address before logging in. Check your inbox for the verification link.'
+      );
+      return;
+    }
 
     onSuccess(authData.user);
   } catch (error) {

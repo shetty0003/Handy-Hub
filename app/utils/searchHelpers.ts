@@ -222,14 +222,18 @@ export async function searchServices(params: {
 }
 
 export function getDefaultCategories() {
+  // Rendered with MaterialCommunityIcons in app/search.tsx, so these must be
+  // MaterialCommunityIcons glyph names. They previously used Ionicons-style
+  // names (zap-outline, leaf-outline, paintbrush-outline, construct-outline,
+  // hammer-outline) which are invalid for that font and warned on every render.
   return [
     { id: 'cleaning', name: 'Cleaning', icon: 'home-outline', color: '#10b981' },
     { id: 'plumbing', name: 'Plumbing', icon: 'wrench-outline', color: '#06b6d4' },
-    { id: 'electrical', name: 'Electrical', icon: 'zap-outline', color: '#f59e0b' },
-    { id: 'gardening', name: 'Gardening', icon: 'leaf-outline', color: '#84cc16' },
-    { id: 'painting', name: 'Painting', icon: 'paintbrush-outline', color: '#ef4444' },
-    { id: 'assembly', name: 'Assembly', icon: 'construct-outline', color: '#8b5cf6' },
-    { id: 'repair', name: 'Repair', icon: 'hammer-outline', color: '#6366f1' },
+    { id: 'electrical', name: 'Electrical', icon: 'flash-outline', color: '#f59e0b' },
+    { id: 'gardening', name: 'Gardening', icon: 'sprout-outline', color: '#84cc16' },
+    { id: 'painting', name: 'Painting', icon: 'brush-outline', color: '#ef4444' },
+    { id: 'assembly', name: 'Assembly', icon: 'wrench', color: '#8b5cf6' },
+    { id: 'repair', name: 'Repair', icon: 'hammer-screwdriver', color: '#6366f1' },
     { id: 'moving', name: 'Moving', icon: 'truck-outline', color: '#14b8a6' },
   ];
 }

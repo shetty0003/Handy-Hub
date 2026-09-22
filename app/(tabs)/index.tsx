@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getUserProfile } from '../../utils/profileHelper';
 import { supabase } from '../../utils/supabase';
+import { resolveIoniconName } from '../utils/iconHelpers';
 
 
 const { width } = Dimensions.get('window');
@@ -55,8 +56,10 @@ export default function HomePage() {
         // Get current user
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (currentUser) {
-          const profile = await getUserProfile(currentUser.id);
-          setUser(profile);
+          // getUserProfile returns { profile, provider } - set the profile itself,
+          // not the wrapper, so the greeting can read full_name.
+          const { profile } = await getUserProfile(currentUser.id);
+          setUser(profile ?? { full_name: currentUser.email?.split('@')[0] ?? 'User' });
         }
 
         // Fetch service categories
@@ -71,29 +74,41 @@ export default function HomePage() {
           setServiceCategories(categories as ServiceCategory[]);
         }
 
-        // Fetch featured providers
+        // Fetch featured providers.
+        // NOTE: there is no foreign key between providers and profiles, so an
+        // embedded `profiles (...)` join fails with PGRST200. Fetch profiles
+        // separately and merge them in.
         const { data: providers, error: providersError } = await supabase
           .from('providers')
-          .select(`
-            id,
-            business_name,
-            business_type,
-            rating,
-            total_jobs,
-            profiles (
-              full_name
-            )
-          `)
+          .select('id, business_name, business_type, rating, total_jobs')
           .order('rating', { ascending: false })
           .limit(5);
 
         if (providersError) {
           console.error('Error fetching featured providers:', providersError);
-        } else {
-          setFeaturedProviders(providers as any);
+        } else if (providers) {
+          const providerIds = providers.map((p) => p.id).filter(Boolean);
+          const profilesById: Record<string, { full_name: string }> = {};
+
+          if (providerIds.length > 0) {
+            const { data: profileRows } = await supabase
+              .from('profiles')
+              .select('id, full_name')
+              .in('id', providerIds);
+
+            for (const row of profileRows ?? []) {
+              profilesById[row.id] = { full_name: row.full_name };
+            }
+          }
+
+          setFeaturedProviders(
+            providers.map((p) => ({ ...p, profiles: profilesById[p.id] ?? null }))
+          );
         }
 
-        // Fetch recent bookings - FIXED QUERY
+        // Fetch recent bookings.
+        // The real column is `customer_id` (not user_id), and the relationship
+        // chain is bookings -> services -> service_categories, which does exist.
         try {
           const { data: bookings, error: bookingsError } = await supabase
             .from('bookings')
@@ -109,112 +124,34 @@ export default function HomePage() {
                 )
               )
             `)
-            .eq('user_id', currentUser?.id)
+            .eq('customer_id', currentUser?.id)
             .order('booking_time', { ascending: false })
             .limit(5);
 
           if (bookingsError) {
-            console.error('Error with Option 1:', bookingsError);
-            
-            // OPTION 2: If bookings has category_id directly
-            const { data: bookings2, error: bookingsError2 } = await supabase
-              .from('bookings')
-              .select(`
-                id,
-                service_name,
-                booking_time,
-                status,
-                category_id
-              `)
-              .eq('user_id', currentUser?.id)
-              .order('booking_time', { ascending: false })
-              .limit(5);
-
-            if (bookingsError2) {
-              console.error('Error with Option 2:', bookingsError2);
-              
-              // OPTION 3: Just get basic booking data without categories
-              const { data: bookings3, error: bookingsError3 } = await supabase
-                .from('bookings')
-                .select('*')
-                .eq('user_id', currentUser?.id)
-                .order('booking_time', { ascending: false })
-                .limit(5);
-
-              if (bookingsError3) {
-                console.error('Error with Option 3:', bookingsError3);
-                setRecentBookings([]);
-              } else if (bookings3) {
-                // Map bookings with default category icon
-                const mappedBookings = bookings3.map(booking => ({
-                  id: booking.id,
-                  service_name: booking.service_name || 'Service',
-                  booking_time: booking.booking_time,
-                  status: booking.status || 'Pending',
-                  service_categories: {
-                    icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
-                    color: '#0d9488'
-                  }
-                }));
-                setRecentBookings(mappedBookings);
-              }
-            } else if (bookings2) {
-              // If we have category_id, fetch categories separately
-              const categoryIds = bookings2.map(b => b.category_id).filter(Boolean);
-              const categoriesMap: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {};
-              
-              if (categoryIds.length > 0) {
-                const { data: categoriesData } = await supabase
-                  .from('service_categories')
-                  .select('*')
-                  .in('id', categoryIds);
-                
-                if (categoriesData) {
-                  categoriesData.forEach((category: any) => {
-                    categoriesMap[category.id] = {
-                      icon: category.icon as keyof typeof Ionicons.glyphMap,
-                      color: category.color
-                    };
-                  });
-                }
-              }
-              
-              const mappedBookings = bookings2.map(booking => ({
-                id: booking.id,
-                service_name: booking.service_name || 'Service',
-                booking_time: booking.booking_time,
-                status: booking.status || 'Pending',
-                service_categories: categoriesMap[booking.category_id] || {
-                  icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
-                  color: '#0d9488'
-                }
-              }));
-              
-              setRecentBookings(mappedBookings);
-            }
-          } else if (bookings) {
-            // Transform data from Option 1
-            const transformedBookings = bookings.map(booking => {
-              // booking.services might be an array, so get the first service's category
-              const serviceCategory = Array.isArray(booking.services) && 
-                booking.services.length > 0 && 
-                Array.isArray(booking.services[0]?.service_categories) && 
-                booking.services[0].service_categories.length > 0
-                ? booking.services[0].service_categories[0]
-                : booking.services?.[0]?.service_categories?.[0] || {
-                    icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
-                    color: '#0d9488'
-                  };
+            console.error('Error fetching recent bookings:', bookingsError);
+            setRecentBookings([]);
+          } else {
+            const transformedBookings = (bookings ?? []).map((booking: any) => {
+              const svc = Array.isArray(booking.services)
+                ? booking.services[0]
+                : booking.services;
+              const category = Array.isArray(svc?.service_categories)
+                ? svc?.service_categories[0]
+                : svc?.service_categories;
 
               return {
                 id: booking.id,
                 service_name: booking.service_name || 'Service',
                 booking_time: booking.booking_time,
                 status: booking.status || 'Pending',
-                service_categories: serviceCategory
+                service_categories: category ?? {
+                  icon: 'construct-outline' as keyof typeof Ionicons.glyphMap,
+                  color: '#0d9488',
+                },
               };
             });
-            
+
             setRecentBookings(transformedBookings);
           }
         } catch (error) {
@@ -232,7 +169,13 @@ export default function HomePage() {
   }, []);
 
   const handleServicePress = (serviceName: string) => {
-    router.push('/serviceselectionscreen');
+    // Carry the tapped category through to the booking flow. Previously the
+    // name was accepted and then discarded, so every category opened the same
+    // generic screen with no context (the "popular services" bug).
+    router.push({
+      pathname: '/serviceselectionscreen',
+      params: { category: serviceName },
+    });
   };
 
   const handleProfilePress = () => {
@@ -363,7 +306,7 @@ export default function HomePage() {
                     activeOpacity={0.7}
                   >
                     <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
-                      <Ionicons name={category.icon} size={28} color="white" />
+                      <Ionicons name={resolveIoniconName(category.icon)} size={28} color="white" />
                     </View>
                     <Text style={styles.categoryName}>{category.name}</Text>
                   </TouchableOpacity>
@@ -464,7 +407,7 @@ export default function HomePage() {
                     ]}
                   >
                     <Ionicons
-                      name={booking.service_categories.icon}
+                      name={resolveIoniconName(booking.service_categories.icon)}
                       size={24}
                       color="white"
                     />
