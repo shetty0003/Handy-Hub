@@ -1,0 +1,35 @@
+-- Expanded service categories - 30+ categories for complete marketplace
+INSERT INTO public.service_categories (name, icon, color) VALUES
+    ('Cleaning', 'home-outline', '#10b981'),
+    ('Plumbing', 'wrench-outline', '#06b6d4'),
+    ('Electrical', 'zap-outline', '#f59e0b'),
+    ('Gardening', 'leaf-outline', '#84cc16'),
+    ('Painting', 'paintbrush-outline', '#ef4444'),
+    ('Assembly', 'construct-outline', '#8b5cf6'),
+    ('Repair', 'hammer-outline', '#6366f1'),
+    ('Moving', 'truck-outline', '#14b8a6'),
+    ('HVAC', 'thermometer-outline', '#ec4899'),
+    ('Carpentry', 'hammer-outline', '#f97316'),
+    ('Landscaping', 'flower-outline', '#22c55e'),
+    ('Appliance Repair', 'construct-outline', '#6366f1'),
+    ('Window Cleaning', 'sun-outline', '#facc15'),
+    ('Roof Repair', 'home-outline', '#dc2626'),
+    ('Deck Building', 'construct-outline', '#9333ea'),
+    ('Pressure Washing', 'water-outline', '#0ea5e9'),
+    ('Flooring', 'grid-outline', '#64748b'),
+    ('Tile Work', 'square-outline', '#10b981'),
+    ('Insulation', 'layers-outline', '#fb923c'),
+    ('Septic Services', 'drop-outline', '#0891b2'),
+    ('Fence Installation', 'square-outline', '#059669'),
+    ('Concrete Work', 'cube-outline', '#475569'),
+    ('Fireplace Repair', 'flame-outline', '#dc2626'),
+    ('Gutter Cleaning', 'arrow-down-outline', '#334155'),
+    ('Locksmith', 'key-outline', '#eab308'),
+    ('Pest Control', 'bug-outline', '#16a34a'),
+    ('Water Heater', 'water-outline', '#0ea5e9'),
+    ('Solar Installation', 'sun-outline', '#f59e0b'),
+    ('Bathroom Remodel', 'cube-outline', '#8b5cf6'),
+    ('Kitchen Remodel', 'restaurant-outline', '#ef4444')
+ON CONFLICT (name) DO NOTHING;
+
+echo "Expanded categories added (30 total)";

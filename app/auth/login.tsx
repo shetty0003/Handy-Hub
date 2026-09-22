@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getUserProfile } from '../../utils/profileHelper';
 import { supabase } from '../../utils/supabase';
+import { loginWithValidation } from '../../utils/authHelpers';
+import { handleError } from '../../utils/errorHandler';
 
 const CustomLogo = () => (
   <View style={styles.logoContainer}>
@@ -39,85 +41,41 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address');
-      return;
-    }
-
     setLoading(true);
     try {
-      // 1. Sign in with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
+      await loginWithValidation(
+        { email, password },
+        // onSuccess
+        async (user) => {
+          // 2. Get user profile
+          const { profile } = await getUserProfile(user.id);
 
-      if (authError) {
-        if (authError.message.includes('Invalid login credentials')) {
-          Alert.alert(
-            'Login Failed',
-            'Invalid email or password. Please check your credentials and try again.'
-          );
-        } else if (authError.message.includes('Email not confirmed')) {
-          Alert.alert(
-            'Email Not Verified',
-            'Please verify your email address before logging in. Check your inbox for the verification link.'
-          );
-        } else if (authError.message.includes('rate limit')) {
-          Alert.alert(
-            'Too Many Attempts',
-            'Please wait a few minutes before trying again.'
-          );
-        } else {
-          Alert.alert('Login Failed', authError.message);
+          // 3. Route based on user type
+          if (profile?.user_type === 'provider') {
+            // Check verification status for providers
+            if (profile.verification_status !== 'verified') {
+              Alert.alert(
+                'Account Under Review',
+                'Your provider account is still under review. You\'ll be notified once verified.',
+                [{ text: 'OK', onPress: () => router.replace('/(provider-tabs)') }]
+              );
+            } else {
+              router.replace('/(provider-tabs)');
+            }
+          } else {
+            // Customer or default
+            router.replace('/(tabs)');
+          }
+        },
+        // onError
+        (message) => {
+          Alert.alert('Login Failed', message);
         }
-        return;
-      }
-
-      if (!authData.user) {
-        Alert.alert('Error', 'User not found');
-        return;
-      }
-
-      // 2. Get user profile
-      const { profile } = await getUserProfile(authData.user.id);
-      
-      // 3. Route based on user type
-      if (profile?.user_type === 'provider') {
-        // Check verification status for providers
-        if (profile.verification_status !== 'verified') {
-          Alert.alert(
-            'Account Under Review',
-            'Your provider account is still under review. You\'ll be notified once verified.',
-            [{ text: 'OK', onPress: () => router.replace('/(provider-tabs)') }]
-          );
-        } else {
-          router.replace('/(provider-tabs)');
-        }
-      } else {
-        // Customer or default
-        router.replace('/(tabs)');
-      }
-
-    } catch (error: any) {
+      );
+    } catch (error) {
       console.error('Login error:', error);
-      
-      // Network error detection
-      if (error.message?.includes('Network request failed') || 
-          error.message?.includes('fetch')) {
-        Alert.alert(
-          'Network Error',
-          'Unable to connect to the server. Please check your internet connection.'
-        );
-      } else {
-        Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-      }
+      const { userMessage } = handleError(error, 'login');
+      Alert.alert('Error', userMessage);
     } finally {
       setLoading(false);
     }

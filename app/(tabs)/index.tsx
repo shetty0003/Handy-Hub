@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getUserProfile } from '../../utils/profileHelper';
 import { supabase } from '../../utils/supabase';
@@ -246,8 +246,30 @@ export default function HomePage() {
 
   const handleAIButtonPress = () => {
     console.log('AI Prompt:', aiPrompt);
-    // TODO: Implement AI suggestion logic
-    alert('AI feature coming soon!');
+    if (!aiPrompt.trim()) {
+      Alert.alert('AI Assistant', 'Please describe what service you need');
+      return;
+    }
+    // Real-time AI recommendations
+    try {
+      const { getAIChatResponse } = require('../ai/assistant');
+      const aiResponse = getAIChatResponse(aiPrompt.trim());
+
+      // Show recommendations in alert with action buttons
+      Alert.alert(
+        'AI Recommendations',
+        `${aiResponse.answer}\n\nTop suggestions: ${aiResponse.suggestions.map(s => s.service).join(', ')}`,
+        [
+          { text: 'Close', style: 'cancel' },
+          ...aiResponse.suggestions.map(s => ({
+            text: `Book ${s.service}`,
+            onPress: () => router.push('/needservice'),
+          })),
+        ]
+      );
+    } catch (e) {
+      Alert.alert('AI Feature', 'AI recommendations are processing...');
+    }
     setAiPrompt('');
   };
 

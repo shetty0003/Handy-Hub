@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HandyHub Production Roadmap</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+    <style>
+        :root {
+            --bg: #fafafa;
+            --bg-secondary: #ffffff;
+            --fg: #1a1a1a;
+            --fg-secondary: #4a4a4a;
+            --fg-muted: #6b6b6b;
+            --border: #e0e0e0;
+            --accent: #0066ff;
+            --accent-soft: rgba(0, 102, 255, 0.1);
+            --success: #059669;
+            --warning: #d97706;
+            --error: #dc2626;
+            --info: #0891b2;
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            --hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #0f0f0f;
+                --bg-secondary: #1a1a1a;
+                --fg: #f5f5f5;
+                --fg-secondary: #b8b8b8;
+                --fg-muted: #888888;
+                --border: #2a2a2a;
+                --accent: #3b82f6;
+                --accent-soft: rgba(59, 130, 246, 0.15);
+                --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+                --hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            }
+        }
+
+        :root[data-theme="dark"] {
+            --bg: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --fg: #f5f5f5;
+            --fg-secondary: #b8b8b8;
+            --fg-muted: #888888;
+            --border: #2a2a2a;
+            --accent: #3b82f6;
+            --accent-soft: rgba(59, 130, 246, 0.15);
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            --hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--fg-secondary);
+            font-size: 1.1rem;
+            max-width: 600px;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .stat {
+            text-align: right;
+        }
+
+        .stat-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 2rem;
+            font-weight: 500;
+            color: var(--accent);
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Progress Bar */
+        .progress-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 3rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .progress-title {
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--fg-secondary);
+        }
+
+        .progress-percentage {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #60a5fa);
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+
+        /* Phase Grid */
+        .phases-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .phase-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            transition: box-shadow 0.2s ease;
+        }
+
+        .phase-card:hover {
+            box-shadow: var(--hover-shadow);
+        }
+
+        .phase-card.active {
+            border-color: var(--accent);
+        }
+
+        .phase-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .phase-header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .phase-number {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--accent);
+            background: var(--accent-soft);
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+        }
+
+        .phase-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .phase-duration {
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+        }
+
+        .phase-meta {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .phase-progress-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.875rem;
+            color: var(--fg-secondary);
+        }
+
+        .phase-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .phase-status.pending {
+            background: rgba(107, 107, 107, 0.1);
+            color: var(--fg-muted);
+        }
+
+        .phase-status.in-progress {
+            background: rgba(217, 119, 6, 0.1);
+            color: var(--warning);
+        }
+
+        .phase-status.completed {
+            background: rgba(5, 150, 105, 0.1);
+            color: var(--success);
+        }
+
+        .phase-toggle {
+            font-size: 1.5rem;
+            color: var(--fg-muted);
+            transition: transform 0.2s ease;
+        }
+
+        .phase-card.expanded .phase-toggle {
+            transform: rotate(180deg);
+        }
+
+        .phase-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .phase-card.expanded .phase-content {
+            max-height: 2000px;
+        }
+
+        .phase-tasks {
+            padding: 1.5rem;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 8px;
+            transition: background 0.2s ease;
+        }
+
+        .task-item:hover {
+            background: var(--accent-soft);
+        }
+
+        .task-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .task-checkbox.checked {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .task-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .task-content {
+            flex: 1;
+        }
+
+        .task-title {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .task-item.completed .task-title {
+            text-decoration: line-through;
+            color: var(--fg-muted);
+        }
+
+        .task-description {
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+        }
+
+        .task-item.completed .task-description {
+            text-decoration: line-through;
+        }
+
+        .task-priority {
+            font-size: 0.75rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .task-priority.high {
+            background: rgba(220, 38, 38, 0.1);
+            color: var(--error);
+        }
+
+        .task-priority.medium {
+            background: rgba(217, 119, 6, 0.1);
+            color: var(--warning);
+        }
+
+        .task-priority.low {
+            background: rgba(8, 145, 178, 0.1);
+            color: var(--info);
+        }
+
+        /* Security Gaps Section */
+        .security-section {
+            margin-top: 3rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .security-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .security-item {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .security-icon {
+            font-size: 1.5rem;
+        }
+
+        .security-content h4 {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .security-content p {
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+        }
+
+        .security-severity {
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .severity-critical {
+            color: var(--error);
+        }
+
+        .severity-high {
+            color: var(--warning);
+        }
+
+        .severity-medium {
+            color: var(--info);
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--fg-muted);
+            font-size: 0.875rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .footer-links a {
+            color: var(--fg-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .header-top {
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+
+            .header-stats {
+                width: 100%;
+                justify-content: space-around;
+            }
+
+            .stat {
+                text-align: center;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .phase-meta {
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 0.5rem;
+            }
+
+            .security-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .phase-card {
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        .phase-card:nth-child(1) { animation-delay: 0.1s; }
+        .phase-card:nth-child(2) { animation-delay: 0.2s; }
+        .phase-card:nth-child(3) { animation-delay: 0.3s; }
+        .phase-card:nth-child(4) { animation-delay: 0.4s; }
+        .phase-card:nth-child(5) { animation-delay: 0.5s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-top">
+                <div>
+                    <h1>HandyHub Production Roadmap</h1>
+                    <p>A comprehensive 14-week journey from current state to production-ready service marketplace application</p>
+                </div>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-value" id="completed-tasks">0</span>
+                        <span class="stat-label">Tasks Complete</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="remaining-tasks">0</span>
+                        <span class="stat-label">Tasks Remaining</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">14</span>
+                        <span class="stat-label">Weeks Total</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-header">
+                <span class="progress-title">Overall Progress</span>
+                <span class="progress-percentage" id="progress-percent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="phases-grid" id="phases-container">
+            <!-- Phases will be rendered here -->
+        </div>
+
+        <div class="security-section">
+            <div class="section-header">
+                <h2 class="section-title">Critical Security Gaps</h2>
+            </div>
+            <div class="security-grid">
+                <div class="security-item">
+                    <div class="security-icon">🔐</div>
+                    <div class="security-content">
+                        <h4>Broken Access Control</h4>
+                        <p>No role-based access control on API endpoints. Users could access other users' data.</p>
+                        <div class="security-severity severity-critical">Critical</div>
+                    </div>
+                </div>
+                <div class="security-item">
+                    <div class="security-icon">🔑</div>
+                    <div class="security-content">
+                        <h4>Cryptographic Failures</h4>
+                        <p>Environment variables exposed in code with placeholder values.</p>
+                        <div class="security-severity severity-critical">Critical</div>
+                    </div>
+                </div>
+                <div class="security-item">
+                    <div class="security-icon">💉</div>
+                    <div class="security-content">
+                        <h4>Injection Risks</h4>
+                        <p>No visible input sanitization beyond basic validation.</p>
+                        <div class="security-severity severity-high">High</div>
+                    </div>
+                </div>
+                <div class="security-item">
+                    <div class="security-icon">🏛️</div>
+                    <div class="security-content">
+                        <h4>Insecure Design</h4>
+                        <p>Missing security controls in provider verification flow.</p>
+                        <div class="security-severity severity-high">High</div>
+                    </div>
+                </div>
+                <div class="security-item">
+                    <div class="security-icon">⚙️</div>
+                    <div class="security-content">
+                        <h4>Security Misconfiguration</h4>
+                        <p>No evidence of security headers, CORS policies, or rate limiting.</p>
+                        <div class="security-severity severity-medium">Medium</div>
+                    </div>
+                </div>
+                <div class="security-item">
+                    <div class="security-icon">👤</div>
+                    <div class="security-content">
+                        <h4>Auth Failures</h4>
+                        <p>No multi-factor authentication, weak password policies.</p>
+                        <div class="security-severity severity-high">High</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div>Last updated: September 21, 2026</div>
+            <div class="footer-links">
+                <a href="#phases-container">View Phases</a>
+                <a href="#">Export PDF</a>
+                <a href="#">Share</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Roadmap Data
+        const roadmapData = {
+            phases: [
+                {
+                    id: 1,
+                    title: "Foundation & Security",
+                    duration: "Weeks 1-3",
+                    goal: "Establish secure, scalable foundation with proper authentication and data protection",
+                    status: "in-progress",
+                    tasks: [
+                        { id: "1-1", title: "Environment & Secrets Management", description: "Implement proper environment variables and secret management", priority: "high", completed: false },
+                        { id: "1-2", title: "Authentication Hardening", description: "Email verification, password requirements, rate limiting", priority: "high", completed: false },
+                        { id: "1-3", title: "Authorization & Access Control", description: "Implement Row Level Security (RLS) policies in Supabase", priority: "high", completed: false },
+                        { id: "1-4", title: "Input Validation & Sanitization", description: "Implement comprehensive input validation library (Yup or Zod)", priority: "high", completed: false },
+                        { id: "1-5", title: "Error Handling & Logging", description: "Global error boundary and centralized error logging", priority: "medium", completed: false },
+                        { id: "1-6", title: "Dependency Audit & Updates", description: "Security audit of all dependencies and updates", priority: "medium", completed: false }
+                    ]
+                },
+                {
+                    id: 2,
+                    title: "Core Features & Data Layer",
+                    duration: "Weeks 4-6",
+                    goal: "Implement complete core functionality with proper data modeling",
+                    status: "pending",
+                    tasks: [
+                        { id: "2-1", title: "Database Schema Completion", description: "Create all missing tables and relationships", priority: "high", completed: false },
+                        { id: "2-2", title: "Service Management System", description: "Connect provider services to Supabase backend", priority: "high", completed: false },
+                        { id: "2-3", title: "Booking System", description: "Complete booking flow from search to confirmation", priority: "high", completed: false },
+                        { id: "2-4", title: "Reviews & Ratings System", description: "Review submission and moderation", priority: "medium", completed: false },
+                        { id: "2-5", title: "Provider Verification System", description: "Complete registration and document verification", priority: "high", completed: false },
+                        { id: "2-6", title: "User Profiles & Settings", description: "Profile editing and avatar upload", priority: "medium", completed: false }
+                    ]
+                },
+                {
+                    id: 3,
+                    title: "User Experience & Engagement",
+                    duration: "Weeks 7-9",
+                    goal: "Enhance user experience with real-time features and communication",
+                    status: "pending",
+                    tasks: [
+                        { id: "3-1", title: "Real-time Features", description: "Real-time booking status updates and live location", priority: "medium", completed: false },
+                        { id: "3-2", title: "Communication System", description: "In-app messaging between customers and providers", priority: "high", completed: false },
+                        { id: "3-3", title: "Search & Discovery", description: "Advanced search with filters and AI suggestions", priority: "medium", completed: false },
+                        { id: "3-4", title: "User Engagement Features", description: "Loyalty program and referral system", priority: "low", completed: false },
+                        { id: "3-5", title: "Multimedia Support", description: "Image galleries and document sharing", priority: "low", completed: false }
+                    ]
+                },
+                {
+                    id: 4,
+                    title: "Administration & Operations",
+                    duration: "Weeks 10-12",
+                    goal: "Build administrative tools and operational readiness",
+                    status: "pending",
+                    tasks: [
+                        { id: "4-1", title: "Admin Dashboard", description: "User management and provider verification workflow", priority: "high", completed: false },
+                        { id: "4-2", title: "Analytics & Reporting", description: "Analytics tracking and key metrics dashboard", priority: "medium", completed: false },
+                        { id: "4-3", title: "Payment Processing", description: "Integrate Stripe/PayPal for payments", priority: "high", completed: false },
+                        { id: "4-4", title: "Quality Assurance & Testing", description: "Comprehensive test suite (unit, integration, e2e)", priority: "high", completed: false },
+                        { id: "4-5", title: "Deployment & DevOps", description: "Set up CI/CD pipeline and environments", priority: "medium", completed: false },
+                        { id: "4-6", title: "Compliance & Legal", description: "GDPR/CCPA compliance and privacy policy", priority: "medium", completed: false }
+                    ]
+                },
+                {
+                    id: 5,
+                    title: "Production Readiness & Launch",
+                    duration: "Weeks 13-14",
+                    goal: "Finalize production readiness and execute successful launch",
+                    status: "pending",
+                    tasks: [
+                        { id: "5-1", title: "Performance Optimization", description: "Code splitting, image optimization, caching", priority: "medium", completed: false },
+                        { id: "5-2", title: "Monitoring & Alerting", description: "APM, crash reporting, uptime monitoring", priority: "high", completed: false },
+                        { id: "5-3", title: "Security Hardening", description: "Penetration testing and WAF implementation", priority: "high", completed: false },
+                        { id: "5-4", title: "Backup & Disaster Recovery", description: "Automated backup and recovery procedures", priority: "high", completed: false },
+                        { id: "5-5", title: "Documentation & Training", description: "User docs, admin training, API documentation", priority: "medium", completed: false },
+                        { id: "5-6", title: "Launch Preparation", description: "Beta testing, load testing, marketing materials", priority: "high", completed: false }
+                    ]
+                }
+            ]
+        };
+
+        // Load saved state from localStorage
+        function loadState() {
+            try {
+                const saved = localStorage.getItem('handyhub-roadmap-state');
+                if (saved) {
+                    const state = JSON.parse(saved);
+                    roadmapData.phases.forEach(phase => {
+                        phase.tasks.forEach(task => {
+                            if (state[task.id] !== undefined) {
+                                task.completed = state[task.id];
+                            }
+                        });
+                    });
+                }
+            } catch (e) {
+                console.log('Could not load state from localStorage');
+            }
+        }
+
+        // Save state to localStorage
+        function saveState() {
+            try {
+                const state = {};
+                roadmapData.phases.forEach(phase => {
+                    phase.tasks.forEach(task => {
+                        state[task.id] = task.completed;
+                    });
+                });
+                localStorage.setItem('handyhub-roadmap-state', JSON.stringify(state));
+            } catch (e) {
+                console.log('Could not save state to localStorage');
+            }
+        }
+
+        // Update progress display
+        function updateProgress() {
+            let totalTasks = 0;
+            let completedTasks = 0;
+
+            roadmapData.phases.forEach(phase => {
+                phase.tasks.forEach(task => {
+                    totalTasks++;
+                    if (task.completed) completedTasks++;
+                });
+            });
+
+            const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+            document.getElementById('completed-tasks').textContent = completedTasks;
+            document.getElementById('remaining-tasks').textContent = totalTasks - completedTasks;
+            document.getElementById('progress-percent').textContent = percentage + '%';
+            document.getElementById('progress-fill').style.width = percentage + '%';
+        }
+
+        // Toggle task completion
+        function toggleTask(phaseId, taskId) {
+            const phase = roadmapData.phases.find(p => p.id === phaseId);
+            const task = phase.tasks.find(t => t.id === taskId);
+            task.completed = !task.completed;
+
+            saveState();
+            updateProgress();
+            renderTasks(phaseId);
+            updatePhaseStatus(phaseId);
+        }
+
+        // Update phase status based on tasks
+        function updatePhaseStatus(phaseId) {
+            const phase = roadmapData.phases.find(p => p.id === phaseId);
+            const completedCount = phase.tasks.filter(t => t.completed).length;
+
+            if (completedCount === phase.tasks.length) {
+                phase.status = 'completed';
+            } else if (completedCount > 0) {
+                phase.status = 'in-progress';
+            } else {
+                phase.status = 'pending';
+            }
+
+            renderPhaseHeader(phaseId);
+        }
+
+        // Render phase header
+        function renderPhaseHeader(phaseId) {
+            const phase = roadmapData.phases.find(p => p.id === phaseId);
+            const card = document.querySelector(`[data-phase-id="${phaseId}"]`);
+            const header = card.querySelector('.phase-header');
+
+            const completedCount = phase.tasks.filter(t => t.completed).length;
+            const statusClass = phase.status;
+
+            header.innerHTML = `
+                <div class="phase-header-left">
+                    <span class="phase-number">Phase ${phase.id}</span>
+                    <div>
+                        <h3 class="phase-title">${phase.title}</h3>
+                        <span class="phase-duration">${phase.duration}</span>
+                    </div>
+                </div>
+                <div class="phase-meta">
+                    <span class="phase-progress-text">${completedCount}/${phase.tasks.length} tasks</span>
+                    <span class="phase-status ${statusClass}">${phase.status.replace('-', ' ')}</span>
+                    <span class="phase-toggle">‹</span>
+                </div>
+            `;
+        }
+
+        // Render tasks for a phase
+        function renderTasks(phaseId) {
+            const phase = roadmapData.phases.find(p => p.id === phaseId);
+            const card = document.querySelector(`[data-phase-id="${phaseId}"]`);
+            const tasksContainer = card.querySelector('.phase-tasks');
+
+            tasksContainer.innerHTML = phase.tasks.map(task => `
+                <div class="task-item ${task.completed ? 'completed' : ''}">
+                    <div class="task-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleTask(${phaseId}, '${task.id}')"></div>
+                    <div class="task-content">
+                        <div class="task-title">${task.title}</div>
+                        <div class="task-description">${task.description}</div>
+                    </div>
+                    <span class="task-priority ${task.priority}">${task.priority}</span>
+                </div>
+            `).join('');
+        }
+
+        // Toggle phase expansion
+        function togglePhase(phaseId) {
+            const card = document.querySelector(`[data-phase-id="${phaseId}"]`);
+            card.classList.toggle('expanded');
+        }
+
+        // Render all phases
+        function renderPhases() {
+            const container = document.getElementById('phases-container');
+
+            container.innerHTML = roadmapData.phases.map(phase => `
+                <div class="phase-card ${phase.status === 'in-progress' ? 'active' : ''}" data-phase-id="${phase.id}">
+                    <div class="phase-header" onclick="togglePhase(${phase.id})">
+                        <!-- Header will be rendered by renderPhaseHeader -->
+                    </div>
+                    <div class="phase-content">
+                        <div class="phase-tasks">
+                            <!-- Tasks will be rendered by renderTasks -->
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Render individual components
+            roadmapData.phases.forEach(phase => {
+                renderPhaseHeader(phase.id);
+                renderTasks(phase.id);
+            });
+        }
+
+        // Initialize
+        loadState();
+        renderPhases();
+        updateProgress();
+
+        // Expand first phase by default
+        togglePhase(1);
+    </script>
+</body>
+</html>

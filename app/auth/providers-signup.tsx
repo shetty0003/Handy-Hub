@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +24,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
+import { validateSchema } from '../utils/validation';
 
 const { width } = Dimensions.get('window');
 
@@ -429,50 +431,97 @@ const validatePhoneNumber = (phone: string): boolean => {
     ));
   };
 
-  // Validate current step
+  // Validate current step using Zod schemas
   const validateStep = () => {
     const newErrors: Record<string, string> = {};
 
     switch (currentStep) {
-      case 0: // Personal Info
-        if (!formData.personalInfo.fullName.trim()) newErrors.fullName = 'Full name is required';
-        if (!formData.personalInfo.email.trim()) newErrors.email = 'Email is required';
-        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.personalInfo.email)) newErrors.email = 'Invalid email format';
-        else if (emailAvailable === false) newErrors.email = 'Email already registered';
-        if (!formData.personalInfo.phone.trim()) newErrors.phone = 'Phone number is required';
-        else if (!validatePhoneNumber(formData.personalInfo.phone)) newErrors.phone = 'Please enter a valid phone number (minimum 10 digits)';
+      case 0: { // Personal Info
+        const result = validateSchema(
+          z.object({
+            fullName: z.string().min(1, 'Full name is required'),
+            email: z.string().email('Invalid email format'),
+            phone: z.string().min(10, 'Invalid phone number'),
+          }),
+          {
+            fullName: formData.personalInfo.fullName.trim(),
+            email: formData.personalInfo.email.trim(),
+            phone: formData.personalInfo.phone.trim(),
+          }
+        );
+        if (!result.success) Object.assign(newErrors, result.errors);
+        if (emailAvailable === false) newErrors.email = 'Email already registered';
         break;
-      case 1: // Business Info
-        if (!formData.businessInfo.businessName.trim()) newErrors.businessName = 'Business name is required';
-        else if (businessNameAvailable === false) newErrors.businessName = 'Business name already taken';
-        if (!formData.businessInfo.businessType.trim()) newErrors.businessType = 'Business type is required';
-        if (!formData.businessInfo.businessAddress.trim()) newErrors.businessAddress = 'Business address is required';
-        if (!formData.businessInfo.yearsOfExperience) newErrors.experience = 'Years of experience is required';
-        else if (parseInt(formData.businessInfo.yearsOfExperience) < 0) newErrors.experience = 'Years must be positive';
+      }
+      case 1: { // Business Info
+        const result = validateSchema(
+          z.object({
+            businessName: z.string().min(1, 'Business name is required'),
+            businessType: z.string().min(1, 'Business type is required'),
+            businessAddress: z.string().min(1, 'Business address is required'),
+            yearsOfExperience: z.number().min(0, 'Years must be positive').optional(),
+          }),
+          {
+            businessName: formData.businessInfo.businessName.trim(),
+            businessType: formData.businessInfo.businessType.trim(),
+            businessAddress: formData.businessInfo.businessAddress.trim(),
+            yearsOfExperience: parseInt(formData.businessInfo.yearsOfExperience) || 0,
+          }
+        );
+        if (!result.success) Object.assign(newErrors, result.errors);
+        if (businessNameAvailable === false) newErrors.businessName = 'Business name already taken';
         break;
-      case 2: // Services
-        if (formData.serviceDetails.categories.length === 0) newErrors.categories = 'Select at least one service category';
-        if (!formData.serviceDetails.hourlyRate) newErrors.hourlyRate = 'Hourly rate is required';
-        else if (parseFloat(formData.serviceDetails.hourlyRate) < 10) newErrors.hourlyRate = 'Minimum hourly rate is $10';
-        if (formData.serviceDetails.serviceAreas.length === 0) newErrors.serviceAreas = 'Select service areas';
+      }
+      case 2: { // Services
+        const result = validateSchema(
+          z.object({
+            categories: z.array(z.string()).min(1, 'Select at least one service category'),
+            hourlyRate: z.number().min(10, 'Minimum hourly rate is $10'),
+            serviceAreas: z.array(z.string()).min(1, 'Select service areas'),
+          }),
+          {
+            categories: formData.serviceDetails.categories,
+            hourlyRate: parseFloat(formData.serviceDetails.hourlyRate) || 0,
+            serviceAreas: formData.serviceDetails.serviceAreas,
+          }
+        );
+        if (!result.success) Object.assign(newErrors, result.errors);
         break;
-      case 3: // Documents
+      }
+      case 3: { // Documents
         const requiredDocuments = documents.filter(doc => doc.required);
         const missingRequired = requiredDocuments.filter(doc => !doc.fileUri);
         if (missingRequired.length > 0) {
           newErrors.documents = `${missingRequired.length} required document(s) missing`;
         }
         break;
-      case 4: // Account
-        if (!formData.account.password) newErrors.password = 'Password is required';
-        else if (formData.account.password.length < 12) newErrors.password = 'Minimum 12 characters required';
-        else if (passwordStrength < 60) newErrors.password = 'Password is too weak';
-        if (formData.account.password !== formData.account.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
+      }
+      case 4: { // Account
+        const result = validateSchema(
+          z.object({
+            password: z.string()
+              .min(8, 'Minimum 8 characters required')
+              .regex(/[A-Z]/, 'Need uppercase')
+              .regex(/[a-z]/, 'Need lowercase')
+              .regex(/[0-9]/, 'Need number'),
+            confirmPassword: z.string().min(1, 'Please confirm your password'),
+          }).refine(d => d.password === d.confirmPassword, {
+            message: 'Passwords do not match',
+            path: ['confirmPassword']
+          }),
+          {
+            password: formData.account.password,
+            confirmPassword: formData.account.confirmPassword,
+          }
+        );
+        if (!result.success) Object.assign(newErrors, result.errors);
+        if (passwordStrength < 60) newErrors.password = 'Password is too weak (use uppercase, lowercase, numbers, special chars)';
         if (!formData.agreements.terms) newErrors.terms = 'You must accept Terms of Service';
         if (!formData.agreements.privacy) newErrors.privacy = 'You must accept Privacy Policy';
         if (!formData.agreements.providerAgreement) newErrors.providerAgreement = 'You must accept Provider Agreement';
         if (!formData.agreements.backgroundCheck) newErrors.backgroundCheck = 'You must accept Background Check Terms';
         break;
+      }
     }
 
     setErrors(newErrors);
